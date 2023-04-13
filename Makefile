@@ -4,8 +4,8 @@ RUSTFLAGS_LOCAL="-C target-cpu=native $(RUSTFLAGS) -C link-arg=-fuse-ld=lld"
 CARGO_TARGET_GNU_LINKER="x86_64-unknown-linux-gnu-gcc"
 
 # Some sensible defaults, should be overrided per-project
-BINS ?= persepolis
-PROJ_NAME ?= persepolis
+BINS ?= infernoplex
+PROJ_NAME ?= infernoplex
 HOST ?= 100.86.85.125
 
 all: 
@@ -25,13 +25,10 @@ push:
 		scp -C target/x86_64-unknown-linux-gnu/release/$$bin root@$(HOST):${PROJ_NAME}/$$bin; \
 	done
 
-	# Start persepolis
-	ssh root@$(HOST) "systemctl start persepolis"
+	# Start infernoplex
+	ssh root@$(HOST) "systemctl start infernoplex"
 
 remote:
 	ssh root@$(HOST)
 up:
 	git submodule foreach git pull
-run:
-	-mv -vf persepolis.new persepolis # If it exists
-	./persepolis
