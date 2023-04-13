@@ -1,1 +1,7 @@
 /target
+**/.env
+**/.vscode
+infernoplex
+infernoplex/**
+**/config.yaml
+**/config.yaml.sample
