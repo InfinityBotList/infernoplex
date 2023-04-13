@@ -17,8 +17,8 @@ devrun:
 cross:
 	DATABASE_URL=$(DATABASE_URL) CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=$(CARGO_TARGET_GNU_LINKER) cargo build --target=x86_64-unknown-linux-gnu --release ${ARGS}
 push:
-	# Kill persepolis
-	ssh root@$(HOST) "systemctl stop persepolis"
+	# Kill infernoplex
+	ssh root@$(HOST) "systemctl stop infernoplex"
 
 	@for bin in $(BINS) ; do \
 		echo "Pushing $$bin to $(HOST):${PROJ_NAME}/$$bin"; \
