@@ -31,7 +31,6 @@ pub struct Config {
     pub servers: Servers,
     pub frontend_url: String,
     pub proxy_url: String,
-    pub infernoplex_domain: String,
 }
 
 impl Default for Config {
@@ -43,7 +42,6 @@ impl Default for Config {
             servers: Servers::default(),
             frontend_url: String::from("https://infinitybots.gg"),
             proxy_url: String::from("http://127.0.0.1:3219"),
-            infernoplex_domain: String::from("https://infernoplex.infinitybots.gg"),
         }
     }
 }
