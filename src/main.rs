@@ -12,6 +12,7 @@ mod help;
 mod crypto;
 mod cache;
 mod stats;
+mod setup;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
