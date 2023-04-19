@@ -1,8 +1,6 @@
-use std::{time::Duration, num::NonZeroU64};
-
 use log::{info, error};
-use poise::serenity_prelude::{FullEvent, GuildId};
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use poise::serenity_prelude::{FullEvent};
+use sqlx::{postgres::PgPoolOptions};
 
 use crate::cache::CacheHttpImpl;
 
@@ -76,7 +74,7 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
     }
 }
 
-async fn event_listener(event: &FullEvent, user_data: &Data) -> Result<(), Error> {
+async fn event_listener(event: &FullEvent, _user_data: &Data) -> Result<(), Error> {
     match event {
         FullEvent::InteractionCreate {
             interaction,
@@ -130,6 +128,7 @@ async fn main() {
                 help::help(),
                 help::simplehelp(),
                 stats::stats(),
+                setup::setup(),
             ],
             /// This code is run before every command
             pre_command: |ctx| {

@@ -1,6 +1,6 @@
-use poise::{CreateReply, serenity_prelude::{CreateEmbed, CreateActionRow, CreateButton, ButtonStyle}};
+use poise::{CreateReply, serenity_prelude::{CreateEmbed, CreateActionRow, CreateButton}};
 
-use crate::{Context, Error};
+use crate::{crypto, Context, Error};
 
 /// Sets up a server, needs MANAGE_SERVER permissions
 #[
@@ -54,6 +54,8 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
+    ctx.defer().await?;
+
     // We have to do this to ensure the future stays Send
     let (
         guild_name,
@@ -83,6 +85,26 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
 
     let team_id = team_id.id;
 
+    // Check that server owner is a user
+    let res = sqlx::query!(
+        "SELECT COUNT(*) FROM users WHERE user_id = $1",
+        guild_owner_id
+    )
+    .fetch_one(&mut tx)
+    .await?;
+
+    if res.count.unwrap_or(0) == 0 {
+        sqlx::query!(
+            "INSERT INTO users (user_id, api_token, extra_links, staff, developer, certified) VALUES ($1, $2, $3, false, false, false)",
+            guild_owner_id,
+            crypto::gen_random(138),
+            sqlx::types::JsonValue::Array(vec![]),
+        )
+        .execute(&mut tx)
+        .await?;
+    }
+
+
     // Add owner with OWNER permission
     sqlx::query!(
         "INSERT INTO team_members (team_id, user_id, perms) VALUES ($1, $2, $3)",
@@ -94,6 +116,55 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
     .await?;
 
     // Add the user calling the command to the team too but with less perms since theyre a "setup guy"
+    
+    // First ensure the user is a ibl user
+    let res = sqlx::query!(
+        "SELECT COUNT(*) FROM users WHERE user_id = $1",
+        ctx.author().id.to_string()
+    )
+    .fetch_one(&mut tx)
+    .await?;
+
+    if res.count.unwrap_or(0) == 0 {
+        sqlx::query!(
+            "INSERT INTO users (user_id, api_token, extra_links, staff, developer, certified) VALUES ($1, $2, $3, false, false, false)",
+            ctx.author().id.to_string(),
+            crypto::gen_random(138),
+            sqlx::types::JsonValue::Array(vec![]),
+        )
+        .execute(&mut tx)
+        .await?;
+    }
+    
+    // Then add to team
+    sqlx::query!(
+        "INSERT INTO team_members (team_id, user_id, perms) VALUES ($1, $2, $3)",
+        team_id,
+        ctx.author().id.to_string(),
+        &[
+            "EDIT_SERVER_SETTINGS".to_string(),
+            "SET_SERVER_VANITY".to_string(),
+            "CERTIFY_SERVERS".to_string(),
+            "RESET_SERVER_TOKEN".to_string(),
+            "EDIT_SERVER_WEBHOOKS".to_string(),
+            "TEST_SERVER_WEBHOOKS".to_string(),
+        ]
+    )
+    .execute(&mut tx)
+    .await?;
+
+    // Create the server
+    sqlx::query!(
+        "INSERT INTO servers (server_id, name, avatar, team_owner, api_token, vanity) VALUES ($1, $2, $3, $4, $5, $6)",
+        server_id,
+        guild_name.clone(),
+        guild_icon,
+        team_id,
+        crypto::gen_random(138),
+        guild_name + &crypto::gen_random(8)
+    )
+    .execute(&mut tx)
+    .await?;
 
     Ok(())
 }
