@@ -166,5 +166,7 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
     .execute(&mut tx)
     .await?;
 
+    tx.commit().await?;
+
     Ok(())
 }
