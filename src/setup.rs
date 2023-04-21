@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use poise::{CreateReply, serenity_prelude::{CreateEmbed, CreateActionRow, CreateButton, CreateQuickModal, CreateInputText, InputTextStyle, ButtonStyle}};
+use poise::{CreateReply, serenity_prelude::{CreateEmbed, CreateActionRow, CreateButton, CreateQuickModal, CreateInputText, InputTextStyle, ButtonStyle, CreateInteractionResponse, CreateInteractionResponseMessage, EditInteractionResponse}};
 
 use crate::{crypto, Context, Error};
 
@@ -56,7 +56,7 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    let (short, long) = {
+    let (short, long, inter) = {
         // Create button with confirm+deny
         let builder = CreateReply::default()
         .ephemeral(true)
@@ -129,7 +129,20 @@ By continuing, you agree that you have read and understood the [Terms of Service
                 let inputs = resp.inputs;
                 let (short, long) = (&inputs[0], &inputs[1]);
 
-                (short.clone(), long.clone())
+                resp.interaction.create_response(
+                    &ctx.discord(),
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::default()
+                        .embed(
+                            CreateEmbed::new()
+                            .title("Setting up server...")
+                            .description("This may take a second, please wait...")
+                        )
+                        .ephemeral(true)    
+                    )
+                ).await?;            
+
+                (short.clone(), long.clone(), resp.interaction)
             } else {
                 ctx.send(
                     CreateReply::new()
@@ -157,16 +170,6 @@ By continuing, you agree that you have read and understood the [Terms of Service
             return Ok(()); // We dont want to return an error here since it's not an error
         }
     };
-
-    let status_msg = ctx.send(
-        CreateReply::new()
-        .embed(
-            CreateEmbed::new()
-            .title("Setting up server...")
-            .description("This may take a second, please wait...")
-        )
-        .ephemeral(true)
-    ).await?;
 
     // We have to do this to ensure the future stays Send
     let (
@@ -310,15 +313,14 @@ By continuing, you agree that you have read and understood the [Terms of Service
 
     tx.commit().await?;
 
-    status_msg.edit(
+    inter.edit_response(
         ctx,
-        CreateReply::new()
+        EditInteractionResponse::new()
         .embed(
             CreateEmbed::new()
-            .title("Setting up server...")
-            .description("All done :check:")
+            .title("All Done!")
+            .description("All done :white_check_mark: ")
         )
-        .ephemeral(true)
     ).await?;
 
     Ok(())
