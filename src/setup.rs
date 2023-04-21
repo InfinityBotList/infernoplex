@@ -1,4 +1,6 @@
-use poise::{CreateReply, serenity_prelude::{CreateEmbed, CreateActionRow, CreateButton}};
+use std::time::Duration;
+
+use poise::{CreateReply, serenity_prelude::{CreateEmbed, CreateActionRow, CreateButton, CreateQuickModal, CreateInputText, InputTextStyle, ButtonStyle}};
 
 use crate::{crypto, Context, Error};
 
@@ -54,13 +56,125 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    ctx.defer().await?;
+    let (short, long) = {
+        // Create button with confirm+deny
+        let builder = CreateReply::default()
+        .ephemeral(true)
+        .embed(
+            CreateEmbed::new()
+            .title("Confirm Setup?")
+            .description("
+This will create a team for your server with the owner as well as the caller of this command as members. You can add more members later.
+            
+By continuing, you agree that you have read and understood the [Terms of Service](https://infinitybots.gg/legal/terms) and understand that Infinity Development offers no warranty for the use of this product.
+            ")
+        )
+        .components(
+            vec![
+                CreateActionRow::Buttons(
+                    vec![
+                        CreateButton::new("next")
+                        .label("Next")
+                        .style(ButtonStyle::Primary),
+                        CreateButton::new("cancel")
+                        .label("Cancel")
+                        .style(ButtonStyle::Danger)
+                    ]
+                )
+            ]
+        );
+
+        let mut msg = ctx.send(builder.clone()).await?.into_message().await?;
+
+        let interaction = msg
+            .await_component_interaction(ctx.discord())
+            .author_id(ctx.author().id)
+            .timeout(Duration::from_secs(120))
+            .await;
+
+        if let Some(m) = &interaction {
+            let id = &m.data.custom_id;
+
+            msg.edit(ctx.discord(), builder.to_prefix_edit().components(vec![]))
+                .await?; // remove buttons after button press
+
+            if id == "cancel" {
+                return Ok(());
+            }
+
+            // Create quick modal asking for short and long for initial setup
+            let qm = CreateQuickModal::new("Initial Setup")
+            .field(
+                CreateInputText::new(
+                    InputTextStyle::Short,
+                    "Short Description",
+                    "bot_id",
+                )
+                .placeholder("Something short and snazzy to brag about!")
+                .min_length(20)
+                .max_length(100)
+            )
+            .field(
+                CreateInputText::new(
+                    InputTextStyle::Paragraph,
+                    "Long Description",
+                    "long",
+                )
+                .placeholder("Extended server description. If this is above 4096 chars, you can use the website later to update it.")
+                .min_length(30)
+                .max_length(4096)
+            );
+
+            if let Some(resp) = m.quick_modal(ctx.discord(), qm).await? {
+                let inputs = resp.inputs;
+                let (short, long) = (&inputs[0], &inputs[1]);
+
+                (short.clone(), long.clone())
+            } else {
+                ctx.send(
+                    CreateReply::new()
+                    .embed(
+                        CreateEmbed::new()
+                        .title("Setup Timed Out")
+                        .description("Try rerunning this command again to retry setup your server!")
+                    )
+                    .ephemeral(true)
+                ).await?;
+        
+                return Ok(()); // We dont want to return an error here since it's not an error
+            }
+        } else {
+            ctx.send(
+                CreateReply::new()
+                .embed(
+                    CreateEmbed::new()
+                    .title("Setup Timed Out")
+                    .description("Try rerunning this command again to retry setup your server!")
+                )
+                .ephemeral(true)
+            ).await?;
+    
+            return Ok(()); // We dont want to return an error here since it's not an error
+        }
+    };
+
+    let status_msg = ctx.send(
+        CreateReply::new()
+        .embed(
+            CreateEmbed::new()
+            .title("Setting up server...")
+            .description("This may take a second, please wait...")
+        )
+        .ephemeral(true)
+    ).await?;
 
     // We have to do this to ensure the future stays Send
     let (
         guild_name,
         guild_icon,
         guild_owner_id,
+        guild_total_members,
+        guild_online_members,
     ) = {
         let guild = ctx.guild().ok_or("No guild")?;
 
@@ -68,6 +182,8 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
             guild.name.clone(),
             guild.icon_url().unwrap_or_else(|| "https://cdn.discordapp.com/embed/avatars/0.png".to_string()),
             guild.owner_id.to_string(),
+            guild.members.len(),
+            guild.presences.iter().filter(|(_, p)| p.status != serenity::model::prelude::OnlineStatus::Offline).count()
         )
     };
 
@@ -155,18 +271,55 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
 
     // Create the server
     sqlx::query!(
-        "INSERT INTO servers (server_id, name, avatar, team_owner, api_token, vanity) VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO servers (
+            server_id, 
+            name, 
+            avatar, 
+            team_owner, 
+            api_token, 
+            vanity,
+            total_members,
+            online_members,
+            short,
+            long
+        ) VALUES (
+            $1, 
+            $2, 
+            $3, 
+            $4, 
+            $5, 
+            $6,
+            $7,
+            $8,
+            $9,
+            $10
+        )",
         server_id,
         guild_name.clone(),
         guild_icon,
         team_id,
         crypto::gen_random(138),
-        guild_name + &crypto::gen_random(8)
+        guild_name + &crypto::gen_random(8),
+        i32::try_from(guild_total_members)?,
+        i32::try_from(guild_online_members)?,
+        short,
+        long
     )
     .execute(&mut tx)
     .await?;
 
     tx.commit().await?;
+
+    status_msg.edit(
+        ctx,
+        CreateReply::new()
+        .embed(
+            CreateEmbed::new()
+            .title("Setting up server...")
+            .description("All done :check:")
+        )
+        .ephemeral(true)
+    ).await?;
 
     Ok(())
 }
