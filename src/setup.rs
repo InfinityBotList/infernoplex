@@ -302,7 +302,7 @@ By continuing, you agree that you have read and understood the [Terms of Service
         guild_icon,
         team_id,
         crypto::gen_random(138),
-        guild_name + &crypto::gen_random(8),
+        guild_name.to_ascii_lowercase().replace(' ', "-") + "-" + &crypto::gen_random(8),
         i32::try_from(guild_total_members)?,
         i32::try_from(guild_online_members)?,
         short,
