@@ -117,12 +117,12 @@ By continuing, you agree that you have read and understood the [Terms of Service
             .field(
                 CreateInputText::new(
                     InputTextStyle::Paragraph,
-                    "Long Description",
+                    "Long/Extended Description",
                     "long",
                 )
-                .placeholder("Extended server description. If this is above 4096 chars, you can use the website later to update it.")
+                .placeholder("Note that you can use the website to update it after initial setup.")
                 .min_length(30)
-                .max_length(4096)
+                .max_length(4000)
             );
 
             if let Some(resp) = m.quick_modal(ctx.discord(), qm).await? {
