@@ -31,6 +31,7 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
     if res.count.unwrap_or(0) > 0 {
         ctx.send(
             CreateReply::new()
+            .ephemeral(true)
             .embed(
                 CreateEmbed::new()
                 .title("Server Already Setup")
@@ -59,7 +60,6 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
     let (short, long, inter) = {
         // Create button with confirm+deny
         let builder = CreateReply::default()
-        .ephemeral(true)
         .embed(
             CreateEmbed::new()
             .title("Confirm Setup?")
@@ -284,7 +284,8 @@ By continuing, you agree that you have read and understood the [Terms of Service
             total_members,
             online_members,
             short,
-            long
+            long,
+            extra_links
         ) VALUES (
             $1, 
             $2, 
@@ -295,7 +296,8 @@ By continuing, you agree that you have read and understood the [Terms of Service
             $7,
             $8,
             $9,
-            $10
+            $10,
+            $11
         )",
         server_id,
         guild_name.clone(),
@@ -306,7 +308,8 @@ By continuing, you agree that you have read and understood the [Terms of Service
         i32::try_from(guild_total_members)?,
         i32::try_from(guild_online_members)?,
         short,
-        long
+        long,
+        sqlx::types::JsonValue::Array(vec![])
     )
     .execute(&mut tx)
     .await?;
