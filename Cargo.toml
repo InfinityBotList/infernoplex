@@ -10,8 +10,7 @@ strip = true  # Automatically strip symbols from the binary.
 panic = "abort"  # Abort on panic. This is what we want for a bot.
 
 [dependencies]
-#poise = { git = "https://github.com/serenity-rs/poise", branch = "serenity-next" }
-poise = { git = "https://github.com/cheesycod/poise", branch = "serenity-next" }
+poise = { git = "https://github.com/serenity-rs/poise", branch = "serenity-next" }
 serde = "1.0"
 log = "0.4"
 env_logger = "0.9"
