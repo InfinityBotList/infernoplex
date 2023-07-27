@@ -1,6 +1,6 @@
 use log::{info, error};
-use poise::serenity_prelude::{FullEvent};
-use sqlx::{postgres::PgPoolOptions};
+use poise::serenity_prelude::FullEvent;
+use sqlx::postgres::PgPoolOptions;
 
 use crate::cache::CacheHttpImpl;
 
@@ -10,7 +10,8 @@ mod help;
 mod crypto;
 mod cache;
 mod stats;
-mod setup;
+mod cmds;
+mod splashtail;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -128,7 +129,7 @@ async fn main() {
                 help::help(),
                 help::simplehelp(),
                 stats::stats(),
-                setup::setup(),
+                cmds::setup::setup(),
             ],
             /// This code is run before every command
             pre_command: |ctx| {

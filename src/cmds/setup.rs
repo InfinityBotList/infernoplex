@@ -4,7 +4,7 @@ use poise::{CreateReply, serenity_prelude::{CreateEmbed, CreateActionRow, Create
 
 use crate::{crypto, Context, Error};
 
-/// Sets up a server, needs MANAGE_SERVER permissions
+/// Sets up a server, needs 'Manage Server' permissions
 #[
     poise::command(
         prefix_command,
@@ -38,7 +38,7 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
                 .url(
                     format!("{}/servers/{}", crate::config::CONFIG.frontend_url, server_id)
                 )
-                .description("You can currently only update servers from the website!")
+                .description("Currently, most server settings can only be changed from the website!")
             )
             .components(
                 vec![
@@ -57,16 +57,23 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    let (short, long, inter) = {
+    let (inputs, inter) = {
         // Create button with confirm+deny
         let builder = CreateReply::default()
         .embed(
             CreateEmbed::new()
             .title("Confirm Setup?")
             .description("
-This will create a team for your server with the owner as well as the caller of this command as members. You can add more members later.
-            
-By continuing, you agree that you have read and understood the [Terms of Service](https://infinitybots.gg/legal/terms) and understand that Infinity Development offers no warranty for the use of this product.
+The following setup will now be performed:
+
+- A new team will be created for your server. The server owner and the caller of this command will be its initial members. You can add more members later through `Team Settings`.
+- This server will be added and will be owned by the team. Note that you can transfer ownership of this team to anyone on Infinity Bot List if you want to.
+- The server created will be set as a `draft` and will not be visible until it is published.
+
+Notes: 
+- If you wish to recover access to this server (rogue moderator/admin etc) within Infinity Bot List, please contact [support](https://infinitybots.gg/redirect/discord)
+- **Please now prepare a short and long description for your server.** You can change these later through `Server Settings` on the website.
+- By continuing, you agree that you have read and understood the [Terms of Service](https://infinitybots.gg/legal/terms)
             ")
         )
         .components(
@@ -89,7 +96,7 @@ By continuing, you agree that you have read and understood the [Terms of Service
         let interaction = msg
             .await_component_interaction(ctx.discord())
             .author_id(ctx.author().id)
-            .timeout(Duration::from_secs(120))
+            .timeout(Duration::from_secs(360))
             .await;
 
         if let Some(m) = &interaction {
@@ -120,14 +127,13 @@ By continuing, you agree that you have read and understood the [Terms of Service
                     "Long/Extended Description",
                     "long",
                 )
-                .placeholder("Note that you can use the website to update it after initial setup.")
+                .placeholder("Both markdown and HTML are supported!")
                 .min_length(30)
                 .max_length(4000)
             );
 
             if let Some(resp) = m.quick_modal(ctx.discord(), qm).await? {
                 let inputs = resp.inputs;
-                let (short, long) = (&inputs[0], &inputs[1]);
 
                 resp.interaction.create_response(
                     &ctx.discord(),
@@ -138,18 +144,17 @@ By continuing, you agree that you have read and understood the [Terms of Service
                             .title("Setting up server...")
                             .description("This may take a second, please wait...")
                         )
-                        .ephemeral(true)    
                     )
                 ).await?;            
 
-                (short.clone(), long.clone(), resp.interaction)
+                (inputs, resp.interaction)
             } else {
                 ctx.send(
                     CreateReply::new()
                     .embed(
                         CreateEmbed::new()
-                        .title("Setup Timed Out")
-                        .description("Try rerunning this command again to retry setup your server!")
+                        .title("Modal Timed Out")
+                        .description("Please rerun `/setup`!")
                     )
                     .ephemeral(true)
                 ).await?;
@@ -162,7 +167,7 @@ By continuing, you agree that you have read and understood the [Terms of Service
                 .embed(
                     CreateEmbed::new()
                     .title("Setup Timed Out")
-                    .description("Try rerunning this command again to retry setup your server!")
+                    .description("Please rerun `/setup`!")
                 )
                 .ephemeral(true)
             ).await?;
@@ -171,43 +176,27 @@ By continuing, you agree that you have read and understood the [Terms of Service
         }
     };
 
-    // We have to do this to ensure the future stays Send
-    let (
-        guild_name,
-        guild_icon,
-        guild_owner_id,
-        guild_total_members,
-        guild_online_members,
-    ) = {
-        let guild = ctx.guild().ok_or("No guild")?;
+    // Next try to resolve an invite for this guild
+    let invite = crate::splashtail::invite::setup_invite_view(&ctx).await?;
 
-        (
-            guild.name.clone(),
-            guild.icon_url().unwrap_or_else(|| "https://cdn.discordapp.com/embed/avatars/0.png".to_string()),
-            guild.owner_id.to_string(),
-            guild.members.len(),
-            guild.presences.iter().filter(|(_, p)| p.status != serenity::model::prelude::OnlineStatus::Offline).count()
-        )
-    };
+    // Get guild stats
+    let guild_stats = crate::splashtail::stats::GuildStats::from_ctx(&ctx)?;
 
     // Create a new team
-
     let mut tx = ctx.data().pool.begin().await?;
 
     let team_id = sqlx::query!(
         "INSERT INTO teams (name, avatar) VALUES ($1, $2) RETURNING id",
-        format!("{}'s Team", guild_name),
-        guild_icon
+        format!("{}'s Team", guild_stats.name),
+        guild_stats.icon
     )
     .fetch_one(&mut tx)
     .await?;
 
-    let team_id = team_id.id;
-
     // Check that server owner is a user
     let res = sqlx::query!(
         "SELECT COUNT(*) FROM users WHERE user_id = $1",
-        guild_owner_id
+        guild_stats.owner.to_string()
     )
     .fetch_one(&mut tx)
     .await?;
@@ -215,7 +204,7 @@ By continuing, you agree that you have read and understood the [Terms of Service
     if res.count.unwrap_or(0) == 0 {
         sqlx::query!(
             "INSERT INTO users (user_id, api_token, extra_links, staff, developer, certified) VALUES ($1, $2, $3, false, false, false)",
-            guild_owner_id,
+            guild_stats.owner.to_string(),
             crypto::gen_random(138),
             sqlx::types::JsonValue::Array(vec![]),
         )
@@ -223,19 +212,17 @@ By continuing, you agree that you have read and understood the [Terms of Service
         .await?;
     }
 
-
     // Add owner with OWNER permission
     sqlx::query!(
         "INSERT INTO team_members (team_id, user_id, perms) VALUES ($1, $2, $3)",
-        team_id,
-        guild_owner_id,
+        team_id.id,
+        guild_stats.owner.to_string(),
         &["OWNER".to_string()]
     )
     .execute(&mut tx)
     .await?;
 
-    // Add the user calling the command to the team too but with less perms since theyre a "setup guy"
-    
+    // Add the user calling the command to the team
     // First ensure the user is a ibl user
     let res = sqlx::query!(
         "SELECT COUNT(*) FROM users WHERE user_id = $1",
@@ -258,15 +245,10 @@ By continuing, you agree that you have read and understood the [Terms of Service
     // Then add to team
     sqlx::query!(
         "INSERT INTO team_members (team_id, user_id, perms) VALUES ($1, $2, $3)",
-        team_id,
+        team_id.id,
         ctx.author().id.to_string(),
         &[
-            "EDIT_SERVER_SETTINGS".to_string(),
-            "SET_SERVER_VANITY".to_string(),
-            "CERTIFY_SERVERS".to_string(),
-            "RESET_SERVER_TOKEN".to_string(),
-            "EDIT_SERVER_WEBHOOKS".to_string(),
-            "TEST_SERVER_WEBHOOKS".to_string(),
+            "OWNER".to_string(),
         ]
     )
     .execute(&mut tx)
@@ -285,6 +267,7 @@ By continuing, you agree that you have read and understood the [Terms of Service
             online_members,
             short,
             long,
+            invite,
             extra_links
         ) VALUES (
             $1, 
@@ -297,18 +280,20 @@ By continuing, you agree that you have read and understood the [Terms of Service
             $8,
             $9,
             $10,
-            $11
+            $11,
+            $12
         )",
         server_id,
-        guild_name.clone(),
-        guild_icon,
-        team_id,
+        guild_stats.name.clone(),
+        guild_stats.icon,
+        team_id.id,
         crypto::gen_random(138),
-        guild_name.to_ascii_lowercase().replace(' ', "-") + "-" + &crypto::gen_random(8),
-        i32::try_from(guild_total_members)?,
-        i32::try_from(guild_online_members)?,
-        short,
-        long,
+        guild_stats.name.to_ascii_lowercase().replace(' ', "-") + "-" + &crypto::gen_random(8),
+        i32::try_from(guild_stats.total_members)?,
+        i32::try_from(guild_stats.online_members)?,
+        &inputs[0],
+        &inputs[1],
+        invite,
         sqlx::types::JsonValue::Array(vec![])
     )
     .execute(&mut tx)
