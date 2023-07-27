@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use crate::{Error, Context};
+use log::info;
 use poise::CreateReply;
 use serenity::{all::{CreateEmbed, CreateActionRow, CreateButton, ButtonStyle, InputTextStyle}, builder::{CreateInputText, CreateInteractionResponse, CreateInteractionResponseMessage, EditInteractionResponse}, utils::CreateQuickModal, prelude::CacheHttp};
 use sqlx::types::chrono;
@@ -125,6 +126,18 @@ OK, lets setup the invite for this server! To get started choose which type of i
                     );                        
                 }
 
+                resp.interaction.edit_response(
+                    &ctx.discord(),
+                    EditInteractionResponse::new()
+                        .embed(
+                            CreateEmbed::new()
+                            .title("Resolved invite successfully!")
+                            .description(
+                                format!("You have inputted: {}", invite_url)
+                            )
+                        )
+                ).await?;
+
                 return Ok(invite_url.clone());
             } else {
                 return Err("Timed out waiting for response for invite URL".into());
@@ -153,7 +166,12 @@ OK, lets setup the invite for this server! To get started choose which type of i
 
 async fn resolve_invite(ctx: &Context<'_>,  invite: &str) -> Result<(), Error> {
     // Follow all redirects until reaching end
-    let resp = reqwest::get(invite).await?;
+    let client = reqwest::Client::builder()
+    .timeout(Duration::from_secs(10))
+    .build()?;
+    let resp = client.get(invite).send().await?;
+
+    info!("Response: {:?}", resp);
 
     let url = resp.url().to_string();
 

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use poise::{CreateReply, serenity_prelude::{CreateEmbed, CreateActionRow, CreateButton, CreateQuickModal, CreateInputText, InputTextStyle, ButtonStyle, CreateInteractionResponse, CreateInteractionResponseMessage, EditInteractionResponse}};
+use poise::{CreateReply, serenity_prelude::{CreateEmbed, CreateActionRow, CreateButton, CreateQuickModal, CreateInputText, InputTextStyle, ButtonStyle, CreateInteractionResponse, CreateInteractionResponseMessage}};
 
 use crate::{crypto, Context, Error};
 
@@ -57,7 +57,7 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    let (inputs, inter) = {
+    let inputs = {
         // Create button with confirm+deny
         let builder = CreateReply::default()
         .embed(
@@ -147,7 +147,7 @@ Notes:
                     )
                 ).await?;            
 
-                (inputs, resp.interaction)
+                inputs
             } else {
                 ctx.send(
                     CreateReply::new()
@@ -301,9 +301,8 @@ Notes:
 
     tx.commit().await?;
 
-    inter.edit_response(
-        ctx,
-        EditInteractionResponse::new()
+    ctx.send(
+        CreateReply::new()
         .embed(
             CreateEmbed::new()
             .title("All Done!")
