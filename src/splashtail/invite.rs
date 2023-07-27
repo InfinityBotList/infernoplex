@@ -40,11 +40,13 @@ OK, lets setup the invite for this server! To get started choose which type of i
                 CreateActionRow::Buttons(
                     vec![
                         CreateButton::new("p1")
+                        .label("-")
                         .disabled(true),
                         CreateButton::new("cancel")
                         .label("Cancel")
                         .style(ButtonStyle::Danger),
                         CreateButton::new("p2")
+                        .label("-")
                         .disabled(true),
                     ]
                 )
