@@ -90,7 +90,7 @@ OK, lets setup the invite for this server! To get started choose which type of i
 
                 let invite_url = &inputs[0];
 
-                m.create_response(
+                resp.interaction.create_response(
                     &ctx.discord(),
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::default()
@@ -105,7 +105,7 @@ OK, lets setup the invite for this server! To get started choose which type of i
                 ).await?;                    
 
                 if let Err(e) = resolve_invite(ctx, invite_url).await {
-                    m.edit_response(
+                    resp.interaction.edit_response(
                         &ctx.discord(),
                         EditInteractionResponse::new()
                             .embed(
