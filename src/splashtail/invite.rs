@@ -138,7 +138,7 @@ OK, lets setup the invite for this server! To get started choose which type of i
                         )
                 ).await?;
 
-                return Ok(invite_url.clone());
+                return Ok(id.to_owned() + ":" + invite_url);
             } else {
                 return Err("Timed out waiting for response for invite URL".into());
             }
