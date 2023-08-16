@@ -114,6 +114,16 @@ Notes:
             .field(
                 CreateInputText::new(
                     InputTextStyle::Short,
+                    "Vanity",
+                    "vanity",
+                )
+                .placeholder("This must be unique, so think hard!")
+                .min_length(1)
+                .max_length(20)
+            )
+            .field(
+                CreateInputText::new(
+                    InputTextStyle::Short,
                     "Short Description",
                     "bot_id",
                 )
@@ -212,12 +222,12 @@ Notes:
         .await?;
     }
 
-    // Add owner with OWNER permission
+    // Add owner with Global Owner permission
     sqlx::query!(
-        "INSERT INTO team_members (team_id, user_id, perms) VALUES ($1, $2, $3)",
+        "INSERT INTO team_members (team_id, user_id, flags) VALUES ($1, $2, $3)",
         team_id.id,
         guild_stats.owner.to_string(),
-        &["OWNER".to_string()]
+        &["global.*".to_string()]
     )
     .execute(&mut tx)
     .await?;
@@ -244,14 +254,44 @@ Notes:
     
     // Then add to team
     sqlx::query!(
-        "INSERT INTO team_members (team_id, user_id, perms) VALUES ($1, $2, $3)",
+        "INSERT INTO team_members (team_id, user_id, flags) VALUES ($1, $2, $3)",
         team_id.id,
         ctx.author().id.to_string(),
         &[
-            "OWNER".to_string(),
+            "global.*".to_string(),
         ]
     )
     .execute(&mut tx)
+    .await?;
+
+    // Create a vanity for the server
+    let vanity_count = sqlx::query!(
+        "SELECT COUNT(*) FROM vanity WHERE code::text = $1",
+        inputs[0]
+    )
+    .fetch_one(&mut tx)
+    .await?;
+
+    if vanity_count.count.unwrap_or(0) > 0 {
+        ctx.send(
+            CreateReply::new()
+            .embed(
+                CreateEmbed::new()
+                .title("Vanity Already Exists")
+                .description("Please rerun `/setup` with a new vanity!")
+            )
+            .ephemeral(true)
+        ).await?;
+        return Ok(());
+    }
+
+    let vanity_tag = sqlx::query!(
+        "INSERT INTO vanity (code, target_id, target_type) VALUES ($1::text, $2, $3) RETURNING itag",
+        inputs[0],
+        server_id,
+        "server"
+    )
+    .fetch_one(&mut tx)
     .await?;
 
     // Create the server
@@ -262,12 +302,12 @@ Notes:
             avatar, 
             team_owner, 
             api_token, 
-            vanity,
             total_members,
             online_members,
             short,
             long,
             invite,
+            vanity_ref,
             extra_links
         ) VALUES (
             $1, 
@@ -288,12 +328,12 @@ Notes:
         guild_stats.icon,
         team_id.id,
         crypto::gen_random(138),
-        guild_stats.name.to_ascii_lowercase().replace(' ', "-") + "-" + &crypto::gen_random(8),
         i32::try_from(guild_stats.total_members)?,
         i32::try_from(guild_stats.online_members)?,
-        &inputs[0],
         &inputs[1],
+        &inputs[2],
         invite,
+        vanity_tag.itag,
         sqlx::types::JsonValue::Array(vec![])
     )
     .execute(&mut tx)
