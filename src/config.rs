@@ -1,7 +1,7 @@
 use once_cell::sync::Lazy;
 use poise::serenity_prelude::GuildId;
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::Write, num::NonZeroU64};
+use std::{fs::File, io::Write};
 
 use crate::Error;
 
@@ -17,8 +17,8 @@ pub struct Servers {
 impl Default for Servers {
     fn default() -> Self {
         Self {
-            main: GuildId(NonZeroU64::new(758641373074423808).unwrap()),
-            staff: GuildId(NonZeroU64::new(870950609291972618).unwrap()),
+            main: GuildId::new(758641373074423808),
+            staff: GuildId::new(870950609291972618),
         }
     }
 }
@@ -31,6 +31,7 @@ pub struct Config {
     pub servers: Servers,
     pub frontend_url: String,
     pub proxy_url: String,
+    pub cdn_main_scope_path: String,
 }
 
 impl Default for Config {
@@ -42,6 +43,7 @@ impl Default for Config {
             servers: Servers::default(),
             frontend_url: String::from("https://infinitybots.gg"),
             proxy_url: String::from("http://127.0.0.1:3219"),
+            cdn_main_scope_path: String::from("/silverpelt/cdn/ibl"),
         }
     }
 }

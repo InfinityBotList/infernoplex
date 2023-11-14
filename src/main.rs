@@ -2,8 +2,6 @@ use log::{info, error};
 use poise::serenity_prelude::FullEvent;
 use sqlx::postgres::PgPoolOptions;
 
-use crate::cache::CacheHttpImpl;
-
 mod config;
 mod checks;
 mod help;
@@ -19,7 +17,7 @@ type Context<'a> = poise::Context<'a, Data, Error>;
 // User data, which is stored and accessible in all command invocations
 pub struct Data {
     pool: sqlx::PgPool,
-    cache_http: cache::CacheHttpImpl,
+    //cache_http: cache::CacheHttpImpl,
 }
 
 #[poise::command(prefix_command)]
@@ -34,7 +32,7 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
     // and forward the rest to the default handler
     match error {
         poise::FrameworkError::Setup { error, .. } => panic!("Failed to start bot: {:?}", error),
-        poise::FrameworkError::Command { error, ctx } => {
+        poise::FrameworkError::Command { error, ctx, .. } => {
             error!("Error in command `{}`: {:?}", ctx.command().name, error,);
             let err = ctx
                 .say(format!(
@@ -47,7 +45,7 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
                 error!("SQLX Error: {}", e);
             }
         }
-        poise::FrameworkError::CommandCheckFailed { error, ctx } => {
+        poise::FrameworkError::CommandCheckFailed { error, ctx, .. } => {
             error!(
                 "[Possible] error in command `{}`: {:?}",
                 ctx.command().name,
@@ -123,7 +121,7 @@ async fn main() {
                 prefix: Some("sl!".into()),
                 ..poise::PrefixFrameworkOptions::default()
             },
-            listener: |event, _ctx, user_data| Box::pin(event_listener(event, user_data)),
+            event_handler: |event, _ctx, user_data| Box::pin(event_listener(event, user_data)),
             commands: vec![
                 register(),
                 help::help(),
@@ -156,13 +154,13 @@ async fn main() {
             on_error: |error| Box::pin(on_error(error)),
             ..Default::default()
         },
-        move |ctx, _ready, _framework| {
+        move |_ctx, _ready, _framework| {
             Box::pin(async move {
                 Ok(Data {
-                    cache_http: CacheHttpImpl {
+                    /*cache_http: CacheHttpImpl {
                         cache: ctx.cache.clone(),
                         http: ctx.http.clone(),
-                    },
+                    },*/
                     pool: PgPoolOptions::new()
                         .max_connections(MAX_CONNECTIONS)
                         .connect(&config::CONFIG.database_url)

@@ -25,4 +25,14 @@ impl GuildStats {
             }
         )
     }
+
+    pub async fn download_image(&self) -> Result<Vec<u8>, Error> {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()?;
+
+        let resp = client.get(&self.icon).send().await?;
+
+        Ok(resp.bytes().await?.to_vec())
+    }
 }

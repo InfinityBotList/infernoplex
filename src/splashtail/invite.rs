@@ -57,7 +57,7 @@ OK, lets setup the invite for this server! To get started choose which type of i
     let mut msg: serenity::all::Message = ctx.send(builder.clone()).await?.into_message().await?;
 
     let interaction = msg
-        .await_component_interaction(ctx.discord())
+        .await_component_interaction(ctx)
         .author_id(ctx.author().id)
         .timeout(Duration::from_secs(360))
         .await;
@@ -65,7 +65,7 @@ OK, lets setup the invite for this server! To get started choose which type of i
     if let Some(m) = &interaction {
         let id = &m.data.custom_id;
 
-        msg.edit(ctx.discord(), builder.to_prefix_edit().components(vec![]))
+        msg.edit(ctx, builder.to_prefix_edit().components(vec![]))
             .await?; // remove buttons after button press
 
         if id == "cancel" {
@@ -86,13 +86,13 @@ OK, lets setup the invite for this server! To get started choose which type of i
                     .max_length(100)
                 );
             
-            if let Some(resp) = m.quick_modal(ctx.discord(), qm).await? {
+            if let Some(resp) = m.quick_modal(ctx.serenity_context(), qm).await? {
                 let inputs = resp.inputs;
 
                 let invite_url = &inputs[0];
 
                 resp.interaction.create_response(
-                    &ctx.discord(),
+                    &ctx,
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::default()
                         .embed(
@@ -107,7 +107,7 @@ OK, lets setup the invite for this server! To get started choose which type of i
 
                 if let Err(e) = resolve_invite(ctx, invite_url).await {
                     resp.interaction.edit_response(
-                        &ctx.discord(),
+                        &ctx,
                         EditInteractionResponse::new()
                             .embed(
                                 CreateEmbed::new()
@@ -127,7 +127,7 @@ OK, lets setup the invite for this server! To get started choose which type of i
                 }
 
                 resp.interaction.edit_response(
-                    &ctx.discord(),
+                    &ctx,
                     EditInteractionResponse::new()
                         .embed(
                             CreateEmbed::new()
@@ -145,7 +145,7 @@ OK, lets setup the invite for this server! To get started choose which type of i
         }
 
         m.create_response(
-            &ctx.discord(),
+            &ctx,
             CreateInteractionResponse::Message(
                 CreateInteractionResponseMessage::default()
                 .embed(

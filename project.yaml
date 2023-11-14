@@ -1,0 +1,10 @@
+pkg:
+  language: rust
+  user: "ibl"
+  project: "infernoplex"
+  binary: "infernoplex"
+  service: "infernoplex"
+  lang_opts:
+    bindings: "/iblcdn/public/dev/bindings/infernoplex"
+  env:
+    DATABASE_URL: postgres://localhost/infinity  

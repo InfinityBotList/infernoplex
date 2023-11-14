@@ -20,9 +20,10 @@ struct EmbedHelp {
 }
 
 async fn _embed_help(
+    pctx: Context<'_>,
     ctx: poise::FrameworkContext<'_, Data, Error>,
 ) -> Result<Vec<EmbedHelp>, Error> {
-    let mut categories = indexmap::IndexMap::<Option<&str>, Vec<&Command<Data, Error>>>::new();
+    let mut categories = indexmap::IndexMap::<Option<String>, Vec<&Command<Data, Error>>>::new();
     for cmd in &ctx.options().commands {
         // Check if category exists
         if categories.contains_key(&cmd.category) {
@@ -30,17 +31,39 @@ async fn _embed_help(
         }
         // If category doesn't exist, create it
         else {
-            categories.insert(cmd.category, vec![cmd]);
+            categories.insert(cmd.category.clone(), vec![cmd]);
         }
     }
 
     let mut help_arr = Vec::new();
 
     for (category_name, commands) in categories {
-        let cat_name = category_name.unwrap_or("Commands");
+        let cat_name = category_name.unwrap_or("Commands".to_string());
         let mut menu = "".to_string();
         for command in commands {
             if command.hide_in_help {
+                continue;
+            }
+
+            let mut flag = true;
+
+            for check in command.checks.iter() {
+                let res = check(pctx).await;
+
+                // User may not run this command
+                if res.is_err() {
+                    continue;
+                }
+
+                let res = res.unwrap();
+
+                if !res {
+                    flag = false;
+                    break;
+                }
+            }
+
+            if !flag {
                 continue;
             }
 
@@ -224,14 +247,31 @@ pub async fn help(ctx: Context<'_>, command: Option<String>) -> Result<(), Error
         // They just want the parameters for a specific command
         for botcmd in &ctx.framework().options().commands {
             if botcmd.name == cmd {
-                let params_str = botcmd.parameters.iter().map(
-                    |p| 
-                    format!("{} - {}", p.name, p.description.as_deref().unwrap_or("No description available yet"))
-                ).collect::<Vec<String>>().join("\n");
+                let params_str = botcmd
+                    .parameters
+                    .iter()
+                    .map(|p| {
+                        format!(
+                            "{} - {}",
+                            p.name
+                                .as_deref()
+                                .unwrap_or("No name available yet"),
+                            p.description
+                                .as_deref()
+                                .unwrap_or("No description available yet")
+                        )
+                    })
+                    .collect::<Vec<String>>()
+                    .join("\n");
 
                 let mut embed = CreateEmbed::default()
                     .title(format!("Help for {}", botcmd.name))
-                    .description(botcmd.description.as_deref().unwrap_or("No description available yet"))
+                    .description(
+                        botcmd
+                            .description
+                            .as_deref()
+                            .unwrap_or("No description available yet"),
+                    )
                     .field("Parameters", params_str, false);
 
                 for subcmd in botcmd.subcommands.iter() {
@@ -239,16 +279,27 @@ pub async fn help(ctx: Context<'_>, command: Option<String>) -> Result<(), Error
                         subcmd.name.clone(),
                         format!(
                             "{}\n{}",
-                            subcmd.description.as_deref().unwrap_or("No description available yet"),
-                            subcmd.parameters.iter().map(
-                                |p| 
-                                format!("*{}* - {}", p.name, p.description.as_deref().unwrap_or("No description available yet"))
-                            ).collect::<Vec<String>>().join("\n")
+                            subcmd
+                                .description
+                                .as_deref()
+                                .unwrap_or("No description available yet"),
+                            subcmd
+                                .parameters
+                                .iter()
+                                .map(|p| format!(
+                                    "*{}* - {}",
+                                    p.name.as_deref().unwrap_or("No name available yet"),
+                                    p.description
+                                        .as_deref()
+                                        .unwrap_or("No description available yet")
+                                ))
+                                .collect::<Vec<String>>()
+                                .join("\n")
                         ),
-                        false
+                        false,
                     );
                 }
-    
+
                 ctx.send(CreateReply::new().embed(embed)).await?;
 
                 return Ok(());
@@ -259,28 +310,28 @@ pub async fn help(ctx: Context<'_>, command: Option<String>) -> Result<(), Error
         return Ok(());
     }
 
-    let eh = _embed_help(ctx.framework()).await?;
+    let eh = _embed_help(ctx, ctx.framework()).await?;
 
-    let msg = _help_send_index(Some(ctx), None, &ctx.discord().http, &eh, 0, None).await?;
+    let msg = _help_send_index(Some(ctx), None, &ctx.serenity_context().http, &eh, 0, None).await?;
 
     if let Some(msg) = msg {
         // Create a collector
         let interaction = msg
-            .await_component_interactions(ctx.discord())
+            .await_component_interactions(ctx.serenity_context())
             .author_id(ctx.author().id)
             .timeout(Duration::from_secs(120));
 
         let mut collect_stream = interaction.stream();
 
         while let Some(item) = collect_stream.next().await {
-            item.defer(&ctx.discord()).await?;
+            item.defer(&ctx.serenity_context()).await?;
 
             let id = &item.data.custom_id;
 
             info!("Received interaction: {}", id);
 
             if id == "hnav:cancel" {
-                item.delete_response(ctx.discord()).await?;
+                item.delete_response(ctx.serenity_context()).await?;
                 return Ok(());
             }
 
@@ -307,7 +358,7 @@ pub async fn help(ctx: Context<'_>, command: Option<String>) -> Result<(), Error
                         channel_id: msg.channel_id,
                         message_id: msg.id,
                     }),
-                    &ctx.discord().http,
+                    &ctx.serenity_context().http,
                     &eh,
                     value,
                     Some(Arc::new(item.clone())),
@@ -327,7 +378,7 @@ pub async fn help(ctx: Context<'_>, command: Option<String>) -> Result<(), Error
                         channel_id: msg.channel_id,
                         message_id: msg.id,
                     }),
-                    &ctx.discord().http,
+                    &ctx.serenity_context().http,
                     &eh,
                     id,
                     Some(Arc::new(item.clone())),
@@ -342,7 +393,7 @@ pub async fn help(ctx: Context<'_>, command: Option<String>) -> Result<(), Error
     Ok(())
 }
 
-#[poise::command(track_edits, prefix_command, slash_command)]
+#[poise::command(category = "Help", prefix_command, slash_command, user_cooldown = 1)]
 pub async fn simplehelp(
     ctx: Context<'_>,
     #[description = "Specific command to show help about"]

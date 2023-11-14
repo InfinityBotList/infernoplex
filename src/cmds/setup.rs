@@ -94,7 +94,7 @@ Notes:
         let mut msg = ctx.send(builder.clone()).await?.into_message().await?;
 
         let interaction = msg
-            .await_component_interaction(ctx.discord())
+            .await_component_interaction(ctx)
             .author_id(ctx.author().id)
             .timeout(Duration::from_secs(360))
             .await;
@@ -102,7 +102,7 @@ Notes:
         if let Some(m) = &interaction {
             let id = &m.data.custom_id;
 
-            msg.edit(ctx.discord(), builder.to_prefix_edit().components(vec![]))
+            msg.edit(ctx, builder.to_prefix_edit().components(vec![]))
                 .await?; // remove buttons after button press
 
             if id == "cancel" {
@@ -142,11 +142,11 @@ Notes:
                 .max_length(4000)
             );
 
-            if let Some(resp) = m.quick_modal(ctx.discord(), qm).await? {
+            if let Some(resp) = m.quick_modal(ctx.serenity_context(), qm).await? {
                 let inputs = resp.inputs;
 
                 resp.interaction.create_response(
-                    &ctx.discord(),
+                    &ctx,
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::default()
                         .embed(
@@ -196,12 +196,27 @@ Notes:
     let mut tx = ctx.data().pool.begin().await?;
 
     let team_id = sqlx::query!(
-        "INSERT INTO teams (name, avatar) VALUES ($1, $2) RETURNING id",
+        "INSERT INTO teams (name) VALUES ($1) RETURNING id",
         format!("{}'s Team", guild_stats.name),
-        guild_stats.icon
     )
     .fetch_one(&mut tx)
     .await?;
+
+    // Save team avatar to {cdn_main_scope_path}/avatars/teams/{team_id}.webp
+    let img_bytes = guild_stats.download_image().await?;
+
+    // Convert img_bytes to webp
+    let img_webp_bytes = crate::splashtail::webp::image_to_webp(&guild_stats.icon, &img_bytes).map_err(|e| format!("Error converting image to webp: {}", e))?;
+
+    // Save to cdn
+    std::fs::write(
+        format!(
+            "{}/avatars/teams/{}.webp",
+            crate::config::CONFIG.cdn_main_scope_path,
+            team_id.id
+        ),
+        img_webp_bytes
+    ).map_err(|e| format!("Error saving team avatar to cdn: {}", e))?;
 
     // Check that server owner is a user
     let res = sqlx::query!(
