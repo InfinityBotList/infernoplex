@@ -206,17 +206,15 @@ Notes:
     let img_bytes = guild_stats.download_image().await?;
 
     // Convert img_bytes to webp
-    let img_webp_bytes = crate::splashtail::webp::image_to_webp(&guild_stats.icon, &img_bytes).map_err(|e| format!("Error converting image to webp: {}", e))?;
-
-    // Save to cdn
-    std::fs::write(
+    crate::splashtail::webp::image_to_webp(
+        &guild_stats.icon, 
         format!(
             "{}/avatars/teams/{}.webp",
             crate::config::CONFIG.cdn_main_scope_path,
             team_id.id
         ),
-        img_webp_bytes
-    ).map_err(|e| format!("Error saving team avatar to cdn: {}", e))?;
+        &img_bytes
+    ).map_err(|e| format!("Error converting image to webp: {}", e))?;
 
     // Check that server owner is a user
     let res = sqlx::query!(
