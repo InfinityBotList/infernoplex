@@ -3,7 +3,7 @@
 /// This internally just calls cwebp/gif2webp, so you need to have that installed
 pub fn image_to_webp(name: &str, fpath: String, b: &[u8]) -> Result<String, crate::Error> {
     // Create temp file
-    let tmp_id = crate::crypto::gen_random(128);
+    let tmp_id = crate::impls::crypto::gen_random(128);
 
     let tmp = std::env::temp_dir().join("pconv_".to_owned()+&tmp_id);
 

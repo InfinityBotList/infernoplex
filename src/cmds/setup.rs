@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use poise::{CreateReply, serenity_prelude::{CreateEmbed, CreateActionRow, CreateButton, CreateQuickModal, CreateInputText, InputTextStyle, ButtonStyle, CreateInteractionResponse, CreateInteractionResponseMessage}};
 
-use crate::{crypto, Context, Error};
+use crate::{impls::crypto, Context, Error};
 
 /// Sets up a server, needs 'Manage Server' permissions
 #[

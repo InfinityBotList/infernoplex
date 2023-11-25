@@ -2,14 +2,16 @@ use log::{info, error};
 use poise::serenity_prelude::FullEvent;
 use sqlx::postgres::PgPoolOptions;
 
+use crate::impls::cache::CacheHttpImpl;
+
 mod config;
 mod checks;
 mod help;
-mod crypto;
-mod cache;
 mod stats;
 mod cmds;
 mod splashtail;
+mod tasks;
+mod impls;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -17,7 +19,7 @@ type Context<'a> = poise::Context<'a, Data, Error>;
 // User data, which is stored and accessible in all command invocations
 pub struct Data {
     pool: sqlx::PgPool,
-    //cache_http: cache::CacheHttpImpl,
+    cache_http: impls::cache::CacheHttpImpl,
 }
 
 #[poise::command(prefix_command)]
@@ -73,7 +75,7 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
     }
 }
 
-async fn event_listener(event: &FullEvent, _user_data: &Data) -> Result<(), Error> {
+async fn event_listener(event: &FullEvent, user_data: &Data) -> Result<(), Error> {
     match event {
         FullEvent::InteractionCreate {
             interaction,
@@ -89,6 +91,12 @@ async fn event_listener(event: &FullEvent, _user_data: &Data) -> Result<(), Erro
                 "{} is ready!",
                 data_about_bot.user.name
             );
+
+            // Spawn taskcat to start all the tasks
+            tokio::task::spawn(crate::tasks::taskcat::start_all_tasks(
+                user_data.pool.clone(),
+                user_data.cache_http.clone(),
+            ));
         },
         _ => {}
     }
@@ -129,7 +137,7 @@ async fn main() {
                 stats::stats(),
                 cmds::setup::setup(),
             ],
-            /// This code is run before every command
+            // This code is run before every command
             pre_command: |ctx| {
                 Box::pin(async move {
                     info!(
@@ -140,7 +148,7 @@ async fn main() {
                     );
                 })
             },
-            /// This code is run after every command returns Ok
+            // This code is run after every command returns Ok
             post_command: |ctx| {
                 Box::pin(async move {
                     info!(
@@ -154,13 +162,13 @@ async fn main() {
             on_error: |error| Box::pin(on_error(error)),
             ..Default::default()
         },
-        move |_ctx, _ready, _framework| {
+        move |ctx, _ready, _framework| {
             Box::pin(async move {
                 Ok(Data {
-                    /*cache_http: CacheHttpImpl {
+                    cache_http: CacheHttpImpl {
                         cache: ctx.cache.clone(),
                         http: ctx.http.clone(),
-                    },*/
+                    },
                     pool: PgPoolOptions::new()
                         .max_connections(MAX_CONNECTIONS)
                         .connect(&config::CONFIG.database_url)
