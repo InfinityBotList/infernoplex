@@ -1,20 +1,22 @@
 use std::time::Duration;
 
-use poise::{CreateReply, serenity_prelude::{CreateEmbed, CreateActionRow, CreateButton, CreateQuickModal, CreateInputText, InputTextStyle, ButtonStyle, CreateInteractionResponse, CreateInteractionResponseMessage}};
+use poise::{
+    serenity_prelude::{
+        ButtonStyle, CreateActionRow, CreateButton, CreateEmbed, CreateInputText,
+        CreateInteractionResponse, CreateInteractionResponseMessage, CreateQuickModal,
+        InputTextStyle,
+    },
+    CreateReply,
+};
 
-use crate::{impls::crypto, Context, Error};
+use crate::{Context, Error};
 
 /// Sets up a server, needs 'Manage Server' permissions
-#[
-    poise::command(
-        prefix_command,
-        slash_command,
-        required_permissions = "MANAGE_GUILD",
-    )
-]
+#[poise::command(prefix_command, slash_command, required_permissions = "MANAGE_GUILD")]
 pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
     if ctx.guild_id().is_none() {
-        ctx.say("This command can only be used in a server.").await?;
+        ctx.say("This command can only be used in a server.")
+            .await?;
         return Ok(());
     }
 
@@ -31,27 +33,27 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
     if res.count.unwrap_or(0) > 0 {
         ctx.send(
             CreateReply::new()
-            .ephemeral(true)
-            .embed(
-                CreateEmbed::new()
-                .title("Server Already Setup")
-                .url(
-                    format!("{}/servers/{}", crate::config::CONFIG.frontend_url, server_id)
+                .ephemeral(true)
+                .embed(
+                    CreateEmbed::new()
+                        .title("Server Already Setup")
+                        .url(format!(
+                            "{}/servers/{}",
+                            crate::config::CONFIG.frontend_url,
+                            server_id
+                        ))
+                        .description(
+                            "Currently, most server settings can only be changed from the website!",
+                        ),
                 )
-                .description("Currently, most server settings can only be changed from the website!")
-            )
-            .components(
-                vec![
-                    CreateActionRow::Buttons(
-                        vec![
-                            CreateButton::new_link(
-                                format!("{}/servers/{}", crate::config::CONFIG.frontend_url, server_id),
-                            )
-                            .label("Redirect")
-                        ]
-                    )
-                ]
-            )
+                .components(vec![CreateActionRow::Buttons(vec![
+                    CreateButton::new_link(format!(
+                        "{}/servers/{}",
+                        crate::config::CONFIG.frontend_url,
+                        server_id
+                    ))
+                    .label("Redirect"),
+                ])]),
         )
         .await?;
         return Ok(());
@@ -94,7 +96,7 @@ Notes:
         let mut msg = ctx.send(builder.clone()).await?.into_message().await?;
 
         let interaction = msg
-            .await_component_interaction(ctx)
+            .await_component_interaction(ctx.serenity_context().shard.clone())
             .author_id(ctx.author().id)
             .timeout(Duration::from_secs(360))
             .await;
@@ -102,8 +104,13 @@ Notes:
         if let Some(m) = &interaction {
             let id = &m.data.custom_id;
 
-            msg.edit(ctx, builder.to_prefix_edit().components(vec![]))
-                .await?; // remove buttons after button press
+            msg.edit(
+                ctx,
+                builder
+                    .to_prefix_edit(serenity::all::EditMessage::default())
+                    .components(vec![]),
+            )
+            .await?; // remove buttons after button press
 
             if id == "cancel" {
                 return Ok(());
@@ -111,77 +118,72 @@ Notes:
 
             // Create quick modal asking for short and long for initial setup
             let qm = CreateQuickModal::new("Initial Setup")
-            .field(
-                CreateInputText::new(
-                    InputTextStyle::Short,
-                    "Vanity",
-                    "vanity",
+                .field(
+                    CreateInputText::new(InputTextStyle::Short, "Vanity", "vanity")
+                        .placeholder("This must be unique, so think hard!")
+                        .min_length(1)
+                        .max_length(20),
                 )
-                .placeholder("This must be unique, so think hard!")
-                .min_length(1)
-                .max_length(20)
-            )
-            .field(
-                CreateInputText::new(
-                    InputTextStyle::Short,
-                    "Short Description",
-                    "bot_id",
+                .field(
+                    CreateInputText::new(InputTextStyle::Short, "Short Description", "bot_id")
+                        .placeholder("Something short and snazzy to brag about!")
+                        .min_length(20)
+                        .max_length(100),
                 )
-                .placeholder("Something short and snazzy to brag about!")
-                .min_length(20)
-                .max_length(100)
-            )
-            .field(
-                CreateInputText::new(
-                    InputTextStyle::Paragraph,
-                    "Long/Extended Description",
-                    "long",
-                )
-                .placeholder("Both markdown and HTML are supported!")
-                .min_length(30)
-                .max_length(4000)
-            );
+                .field(
+                    CreateInputText::new(
+                        InputTextStyle::Paragraph,
+                        "Long/Extended Description",
+                        "long",
+                    )
+                    .placeholder("Both markdown and HTML are supported!")
+                    .min_length(30)
+                    .max_length(4000),
+                );
 
             if let Some(resp) = m.quick_modal(ctx.serenity_context(), qm).await? {
                 let inputs = resp.inputs;
 
-                resp.interaction.create_response(
-                    &ctx,
-                    CreateInteractionResponse::Message(
-                        CreateInteractionResponseMessage::default()
-                        .embed(
-                            CreateEmbed::new()
-                            .title("Setting up server...")
-                            .description("This may take a second, please wait...")
-                        )
+                resp.interaction
+                    .create_response(
+                        ctx.http(),
+                        CreateInteractionResponse::Message(
+                            CreateInteractionResponseMessage::default().embed(
+                                CreateEmbed::new()
+                                    .title("Setting up server...")
+                                    .description("This may take a second, please wait..."),
+                            ),
+                        ),
                     )
-                ).await?;            
+                    .await?;
 
                 inputs
             } else {
                 ctx.send(
                     CreateReply::new()
-                    .embed(
-                        CreateEmbed::new()
-                        .title("Modal Timed Out")
-                        .description("Please rerun `/setup`!")
-                    )
-                    .ephemeral(true)
-                ).await?;
-        
+                        .embed(
+                            CreateEmbed::new()
+                                .title("Modal Timed Out")
+                                .description("Please rerun `/setup`!"),
+                        )
+                        .ephemeral(true),
+                )
+                .await?;
+
                 return Ok(()); // We dont want to return an error here since it's not an error
             }
         } else {
             ctx.send(
                 CreateReply::new()
-                .embed(
-                    CreateEmbed::new()
-                    .title("Setup Timed Out")
-                    .description("Please rerun `/setup`!")
-                )
-                .ephemeral(true)
-            ).await?;
-    
+                    .embed(
+                        CreateEmbed::new()
+                            .title("Setup Timed Out")
+                            .description("Please rerun `/setup`!"),
+                    )
+                    .ephemeral(true),
+            )
+            .await?;
+
             return Ok(()); // We dont want to return an error here since it's not an error
         }
     };
@@ -199,39 +201,52 @@ Notes:
         "INSERT INTO teams (name) VALUES ($1) RETURNING id",
         format!("{}'s Team", guild_stats.name),
     )
-    .fetch_one(&mut tx)
+    .fetch_one(&mut *tx)
     .await?;
 
     // Save team avatar to {cdn_main_scope_path}/avatars/teams/{team_id}.webp
     let img_bytes = guild_stats.download_image().await?;
 
-    // Convert img_bytes to webp
+    // Convert img_bytes to webp for both teams and servers
     crate::splashtail::webp::image_to_webp(
-        &guild_stats.icon, 
+        &guild_stats.icon,
         format!(
             "{}/avatars/teams/{}.webp",
             crate::config::CONFIG.cdn_main_scope_path,
             team_id.id
         ),
-        &img_bytes
-    ).map_err(|e| format!("Error converting image to webp: {}", e))?;
+        &img_bytes.clone(),
+    )
+    .map_err(|e| format!("Error converting image to webp [teams]: {}", e))?;
+
+    // Convert img_bytes to webp for both teams and servers
+    crate::splashtail::webp::image_to_webp(
+        &guild_stats.icon,
+        format!(
+            "{}/avatars/servers/{}.webp",
+            crate::config::CONFIG.cdn_main_scope_path,
+            server_id
+        ),
+        &img_bytes.clone(),
+    )
+    .map_err(|e| format!("Error converting image to webp [servers]: {}", e))?;
 
     // Check that server owner is a user
     let res = sqlx::query!(
         "SELECT COUNT(*) FROM users WHERE user_id = $1",
         guild_stats.owner.to_string()
     )
-    .fetch_one(&mut tx)
+    .fetch_one(&mut *tx)
     .await?;
 
     if res.count.unwrap_or(0) == 0 {
         sqlx::query!(
-            "INSERT INTO users (user_id, api_token, extra_links, staff, developer, certified) VALUES ($1, $2, $3, false, false, false)",
+            "INSERT INTO users (user_id, api_token, extra_links, developer, certified) VALUES ($1, $2, $3, false, false)",
             guild_stats.owner.to_string(),
-            crypto::gen_random(138),
+            botox::crypto::gen_random(138),
             sqlx::types::JsonValue::Array(vec![]),
         )
-        .execute(&mut tx)
+        .execute(&mut *tx)
         .await?;
     }
 
@@ -242,7 +257,7 @@ Notes:
         guild_stats.owner.to_string(),
         &["global.*".to_string()]
     )
-    .execute(&mut tx)
+    .execute(&mut *tx)
     .await?;
 
     // Add the user calling the command to the team
@@ -251,60 +266,59 @@ Notes:
         "SELECT COUNT(*) FROM users WHERE user_id = $1",
         ctx.author().id.to_string()
     )
-    .fetch_one(&mut tx)
+    .fetch_one(&mut *tx)
     .await?;
 
     if res.count.unwrap_or(0) == 0 {
         sqlx::query!(
-            "INSERT INTO users (user_id, api_token, extra_links, staff, developer, certified) VALUES ($1, $2, $3, false, false, false)",
+            "INSERT INTO users (user_id, api_token, extra_links, developer, certified) VALUES ($1, $2, $3, false, false)",
             ctx.author().id.to_string(),
-            crypto::gen_random(138),
+            botox::crypto::gen_random(138),
             sqlx::types::JsonValue::Array(vec![]),
         )
-        .execute(&mut tx)
+        .execute(&mut *tx)
         .await?;
     }
-    
+
     // Then add to team
     sqlx::query!(
         "INSERT INTO team_members (team_id, user_id, flags) VALUES ($1, $2, $3)",
         team_id.id,
         ctx.author().id.to_string(),
-        &[
-            "global.*".to_string(),
-        ]
+        &["global.*".to_string(),]
     )
-    .execute(&mut tx)
+    .execute(&mut *tx)
     .await?;
 
     // Create a vanity for the server
     let vanity_count = sqlx::query!(
         "SELECT COUNT(*) FROM vanity WHERE code::text = $1",
-        inputs[0]
+        &inputs[0].to_string()
     )
-    .fetch_one(&mut tx)
+    .fetch_one(&mut *tx)
     .await?;
 
     if vanity_count.count.unwrap_or(0) > 0 {
         ctx.send(
             CreateReply::new()
-            .embed(
-                CreateEmbed::new()
-                .title("Vanity Already Exists")
-                .description("Please rerun `/setup` with a new vanity!")
-            )
-            .ephemeral(true)
-        ).await?;
+                .embed(
+                    CreateEmbed::new()
+                        .title("Vanity Already Exists")
+                        .description("Please rerun `/setup` with a new vanity!"),
+                )
+                .ephemeral(true),
+        )
+        .await?;
         return Ok(());
     }
 
     let vanity_tag = sqlx::query!(
         "INSERT INTO vanity (code, target_id, target_type) VALUES ($1::text, $2, $3) RETURNING itag",
-        inputs[0],
+        &inputs[0].to_string(),
         server_id,
         "server"
     )
-    .fetch_one(&mut tx)
+    .fetch_one(&mut *tx)
     .await?;
 
     // Create the server
@@ -312,7 +326,6 @@ Notes:
         "INSERT INTO servers (
             server_id, 
             name, 
-            avatar, 
             team_owner, 
             api_token, 
             total_members,
@@ -333,35 +346,33 @@ Notes:
             $8,
             $9,
             $10,
-            $11,
-            $12
+            $11
         )",
         server_id,
-        guild_stats.name.clone(),
-        guild_stats.icon,
+        guild_stats.name.to_string(),
         team_id.id,
-        crypto::gen_random(138),
+        botox::crypto::gen_random(138),
         i32::try_from(guild_stats.total_members)?,
         i32::try_from(guild_stats.online_members)?,
-        &inputs[1],
-        &inputs[2],
+        &inputs[1].to_string(),
+        &inputs[2].to_string(),
         invite,
         vanity_tag.itag,
-        sqlx::types::JsonValue::Array(vec![])
+        serde_json::Value::Array(vec![])
     )
-    .execute(&mut tx)
+    .execute(&mut *tx)
     .await?;
 
     tx.commit().await?;
 
     ctx.send(
-        CreateReply::new()
-        .embed(
+        CreateReply::new().embed(
             CreateEmbed::new()
-            .title("All Done!")
-            .description("All done :white_check_mark: ")
-        )
-    ).await?;
+                .title("All Done!")
+                .description("All done :white_check_mark: "),
+        ),
+    )
+    .await?;
 
     Ok(())
 }

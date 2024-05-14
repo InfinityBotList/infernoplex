@@ -5,8 +5,36 @@ use std::{fs::File, io::Write};
 
 use crate::Error;
 
+pub static CURRENT_ENV: Lazy<&str> = Lazy::new(|| {
+    let current_env = include_bytes!("../current-env");
+
+    std::str::from_utf8(current_env).unwrap()
+});
+
 /// Global config object
 pub static CONFIG: Lazy<Config> = Lazy::new(|| Config::load().expect("Failed to load config"));
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct Differs<T: Default + Clone> {
+    staging: T,
+    prod: T,
+}
+
+impl<T: Default + Clone> Differs<T> {
+    /// Get the value for a given environment
+    pub fn get_for_env(&self, env: &str) -> T {
+        if env == "staging" {
+            self.staging.clone()
+        } else {
+            self.prod.clone()
+        }
+    }
+
+    /// Get the value for the current environment
+    pub fn get(&self) -> T {
+        self.get_for_env(*CURRENT_ENV)
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Servers {
@@ -27,7 +55,8 @@ impl Default for Servers {
 pub struct Config {
     pub database_url: String,
     pub client_secret: String,
-    pub token: String,
+    pub token: Differs<String>,
+    pub prefix: Differs<String>,
     pub servers: Servers,
     pub frontend_url: String,
     pub proxy_url: String,
@@ -38,7 +67,14 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             database_url: String::from(""),
-            token: String::from(""),
+            token: Differs {
+                staging: String::from(""),
+                prod: String::from(""),
+            },
+            prefix: Differs {
+                staging: String::from("sls!"),
+                prod: String::from("sl!"),
+            },
             client_secret: String::from(""),
             servers: Servers::default(),
             frontend_url: String::from("https://infinitybots.gg"),

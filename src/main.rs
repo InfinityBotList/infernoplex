@@ -1,25 +1,34 @@
-use log::{info, error};
-use poise::serenity_prelude::FullEvent;
+use log::{error, info};
+use once_cell::sync::Lazy;
+use serenity::all::FullEvent;
 use sqlx::postgres::PgPoolOptions;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
-use crate::impls::cache::CacheHttpImpl;
-
-mod config;
 mod checks;
-mod help;
-mod stats;
 mod cmds;
+mod config;
+mod help;
 mod splashtail;
+mod stats;
 mod tasks;
-mod impls;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
 
+pub struct ConnectState {
+    pub has_started_bgtasks: bool,
+}
+
+pub static CONNECT_STATE: Lazy<RwLock<ConnectState>> = Lazy::new(|| {
+    RwLock::new(ConnectState {
+        has_started_bgtasks: false,
+    })
+});
+
 // User data, which is stored and accessible in all command invocations
 pub struct Data {
     pool: sqlx::PgPool,
-    cache_http: impls::cache::CacheHttpImpl,
 }
 
 #[poise::command(prefix_command)]
@@ -33,7 +42,6 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
     // They are many errors that can occur, so we only handle the ones we want to customize
     // and forward the rest to the default handler
     match error {
-        poise::FrameworkError::Setup { error, .. } => panic!("Failed to start bot: {:?}", error),
         poise::FrameworkError::Command { error, ctx, .. } => {
             error!("Error in command `{}`: {:?}", ctx.command().name, error,);
             let err = ctx
@@ -55,12 +63,7 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
             );
             if let Some(error) = error {
                 error!("Error in command `{}`: {:?}", ctx.command().name, error,);
-                let err = ctx
-                    .say(format!(
-                        "**{}**",
-                        error
-                    ))
-                    .await;
+                let err = ctx.say(format!("**{}**", error)).await;
 
                 if let Err(e) = err {
                     error!("Error while sending error message: {}", e);
@@ -75,29 +78,31 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
     }
 }
 
-async fn event_listener(event: &FullEvent, user_data: &Data) -> Result<(), Error> {
+async fn event_listener<'a>(
+    ctx: poise::FrameworkContext<'a, Data, Error>,
+    event: &FullEvent,
+) -> Result<(), Error> {
     match event {
-        FullEvent::InteractionCreate {
-            interaction,
-            ctx: _,
-        } => {
+        FullEvent::InteractionCreate { interaction } => {
             info!("Interaction received: {:?}", interaction.id());
-        },
-        FullEvent::Ready {
-            data_about_bot,
-            ctx: _,
-        } => {
-            info!(
-                "{} is ready!",
-                data_about_bot.user.name
-            );
+        }
+        FullEvent::Ready { data_about_bot } => {
+            info!("{} is ready!", data_about_bot.user.name);
 
-            // Spawn taskcat to start all the tasks
-            tokio::task::spawn(crate::tasks::taskcat::start_all_tasks(
-                user_data.pool.clone(),
-                user_data.cache_http.clone(),
-            ));
-        },
+            #[allow(clippy::collapsible_if)]
+            if ctx.serenity_context.shard_id.0 == 0 {
+                if !CONNECT_STATE.read().await.has_started_bgtasks {
+                    if *crate::config::CURRENT_ENV != "staging" {
+                        tokio::task::spawn(botox::taskman::start_all_tasks(
+                            crate::tasks::tasks(),
+                            ctx.serenity_context.clone(),
+                        ));
+                    }
+
+                    CONNECT_STATE.write().await.has_started_bgtasks = true;
+                }
+            }
+        }
         _ => {}
     }
 
@@ -114,74 +119,67 @@ async fn main() {
 
     info!("Proxy URL: {}", config::CONFIG.proxy_url);
 
-    let http = serenity::all::HttpBuilder::new(&config::CONFIG.token)
-        .proxy(config::CONFIG.proxy_url.clone())
-        .ratelimiter_disabled(true)
-        .build();
+    let http = Arc::new(
+        serenity::all::HttpBuilder::new(&config::CONFIG.token.get())
+            .proxy(config::CONFIG.proxy_url.clone())
+            .ratelimiter_disabled(true)
+            .build(),
+    );
 
     let client_builder =
-        serenity::all::ClientBuilder::new_with_http(http, serenity::all::GatewayIntents::all());
+        serenity::all::ClientBuilder::new_with_http(http, serenity::all::GatewayIntents::default() | serenity::all::GatewayIntents::GUILD_MEMBERS | serenity::all::GatewayIntents::GUILD_PRESENCES);
 
-    let framework = poise::Framework::new(
-        poise::FrameworkOptions {
-            initialize_owners: true,
-            prefix_options: poise::PrefixFrameworkOptions {
-                prefix: Some("sl!".into()),
-                ..poise::PrefixFrameworkOptions::default()
-            },
-            event_handler: |event, _ctx, user_data| Box::pin(event_listener(event, user_data)),
-            commands: vec![
-                register(),
-                help::help(),
-                help::simplehelp(),
-                stats::stats(),
-                cmds::setup::setup(),
-            ],
-            // This code is run before every command
-            pre_command: |ctx| {
-                Box::pin(async move {
-                    info!(
-                        "Executing command {} for user {} ({})...",
-                        ctx.command().qualified_name,
-                        ctx.author().name,
-                        ctx.author().id
-                    );
-                })
-            },
-            // This code is run after every command returns Ok
-            post_command: |ctx| {
-                Box::pin(async move {
-                    info!(
-                        "Done executing command {} for user {} ({})...",
-                        ctx.command().qualified_name,
-                        ctx.author().name,
-                        ctx.author().id
-                    );
-                })
-            },
-            on_error: |error| Box::pin(on_error(error)),
-            ..Default::default()
+    let data = Data {
+        pool: PgPoolOptions::new()
+            .max_connections(MAX_CONNECTIONS)
+            .connect(&config::CONFIG.database_url)
+            .await
+            .expect("Could not initialize connection"),
+    };
+
+    let framework = poise::Framework::new(poise::FrameworkOptions {
+        initialize_owners: true,
+        prefix_options: poise::PrefixFrameworkOptions {
+            prefix: Some(crate::config::CONFIG.prefix.get().into()),
+            ..poise::PrefixFrameworkOptions::default()
         },
-        move |ctx, _ready, _framework| {
+        event_handler: |ctx, event| Box::pin(event_listener(ctx, event)),
+        commands: vec![
+            register(),
+            help::help(),
+            help::simplehelp(),
+            stats::stats(),
+            cmds::setup::setup(),
+        ],
+        // This code is run before every command
+        pre_command: |ctx| {
             Box::pin(async move {
-                Ok(Data {
-                    cache_http: CacheHttpImpl {
-                        cache: ctx.cache.clone(),
-                        http: ctx.http.clone(),
-                    },
-                    pool: PgPoolOptions::new()
-                        .max_connections(MAX_CONNECTIONS)
-                        .connect(&config::CONFIG.database_url)
-                        .await
-                        .expect("Could not initialize connection"),
-                    
-                })
+                info!(
+                    "Executing command {} for user {} ({})...",
+                    ctx.command().qualified_name,
+                    ctx.author().name,
+                    ctx.author().id
+                );
             })
         },
-    );
+        // This code is run after every command returns Ok
+        post_command: |ctx| {
+            Box::pin(async move {
+                info!(
+                    "Done executing command {} for user {} ({})...",
+                    ctx.command().qualified_name,
+                    ctx.author().name,
+                    ctx.author().id
+                );
+            })
+        },
+        on_error: |error| Box::pin(on_error(error)),
+        ..Default::default()
+    });
 
     let mut client = client_builder
         .framework(framework)
+        .data(Arc::new(data))
         .await
         .expect("Error creating client");
 

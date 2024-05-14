@@ -15,15 +15,19 @@ impl GuildStats {
     pub fn from_ctx(ctx: &Context) -> Result<Self, Error> {
         let guild = ctx.guild().ok_or("No guild")?;
 
-        Ok(
-            GuildStats {
-                name: guild.name.clone(),
-                icon: guild.icon_url().unwrap_or_else(|| "https://cdn.discordapp.com/embed/avatars/0.png".to_string()),
-                owner: guild.owner_id,
-                total_members: guild.members.len(),
-                online_members: guild.presences.iter().filter(|(_, p)| p.status != serenity::model::prelude::OnlineStatus::Offline).count()
-            }
-        )
+        Ok(GuildStats {
+            name: guild.name.to_string(),
+            icon: guild
+                .icon_url()
+                .unwrap_or_else(|| "https://cdn.discordapp.com/embed/avatars/0.png".to_string()),
+            owner: guild.owner_id,
+            total_members: guild.members.len(),
+            online_members: guild
+                .presences
+                .iter()
+                .filter(|p| p.status != serenity::model::prelude::OnlineStatus::Offline)
+                .count(),
+        })
     }
 
     pub async fn download_image(&self) -> Result<Vec<u8>, Error> {
