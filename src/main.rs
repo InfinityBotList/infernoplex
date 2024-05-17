@@ -126,8 +126,12 @@ async fn main() {
             .build(),
     );
 
-    let client_builder =
-        serenity::all::ClientBuilder::new_with_http(http, serenity::all::GatewayIntents::default() | serenity::all::GatewayIntents::GUILD_MEMBERS | serenity::all::GatewayIntents::GUILD_PRESENCES);
+    let client_builder = serenity::all::ClientBuilder::new_with_http(
+        http,
+        serenity::all::GatewayIntents::default()
+            | serenity::all::GatewayIntents::GUILD_MEMBERS
+            | serenity::all::GatewayIntents::GUILD_PRESENCES,
+    );
 
     let data = Data {
         pool: PgPoolOptions::new()
@@ -137,19 +141,22 @@ async fn main() {
             .expect("Could not initialize connection"),
     };
 
+    let prefix = crate::config::CONFIG.prefix.get();
+
     let framework = poise::Framework::new(poise::FrameworkOptions {
         initialize_owners: true,
         prefix_options: poise::PrefixFrameworkOptions {
-            prefix: Some(crate::config::CONFIG.prefix.get().into()),
+            prefix: Some(prefix.into()),
             ..poise::PrefixFrameworkOptions::default()
         },
         event_handler: |ctx, event| Box::pin(event_listener(ctx, event)),
         commands: vec![
             register(),
             help::help(),
-            help::simplehelp(),
             stats::stats(),
-            cmds::setup::setup(),
+            cmds::server::setup::setup(),
+            cmds::server::update::update(),
+            cmds::server::delete::delete(),
         ],
         // This code is run before every command
         pre_command: |ctx| {
