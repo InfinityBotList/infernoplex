@@ -111,7 +111,14 @@ pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
                     .await?;
 
                     // Confirm the update to the user
-                    ctx.say("Server has been successfully updated!").await?;
+                    ctx.send(
+                        CreateReply::new().embed(
+                            CreateEmbed::new()
+                                .title("All Done!")
+                                .description("All done :white_check_mark: "),
+                        ),
+                    )
+                    .await?;
                     return Ok(());
                 } else {
                     ctx.send(
@@ -140,15 +147,23 @@ pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
                 return Ok(());
             }
         } else {
-            ctx.say(
-                "This server isn't listed on Infinity List. Run `/setup`, if you wish to list it.",
+            ctx.send(
+                CreateReply::new().embed(CreateEmbed::new().title("Error").description(
+                    "This server is not listed on Infinity List. Please run `/setup`",
+                )),
             )
             .await?;
             return Ok(());
         }
     } else {
-        ctx.say("This command can only be used in a server.")
-            .await?;
+        ctx.send(
+            CreateReply::new().embed(
+                CreateEmbed::new()
+                    .title("Error")
+                    .description("This command can only be executed on a server."),
+            ),
+        )
+        .await?;
         return Ok(());
     }
 }
