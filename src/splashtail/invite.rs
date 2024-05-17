@@ -23,11 +23,11 @@ pub async fn setup_invite_view(ctx: &Context<'_>) -> Result<String, Error> {
             CreateEmbed::new()
             .title("Invite Setup")
             .description("
-OK, lets setup the invite for this server! To get started choose which type of invite you would like
+Okay! Now, let's setup the invite for this server! To get started, choose which type of invite you would like
 
 - **Invite URL** - Use a (permanent) invite link of your choice
-- **Per-User Invite** - Infinity Bot List will create an invite for this server for each user
-- **None** - This server will not be invitable. Useful if you wish to use a whitelist form and manually send out invites
+- **Per-User Invite** - Infinity List will create an invite for this server for each user
+- **None** - This server will not be invitable. Useful, if you wish to use a whitelist form and manually send out invites
     "
             )
         )
@@ -89,7 +89,7 @@ OK, lets setup the invite for this server! To get started choose which type of i
             // Ask for invite url now
             let qm = CreateQuickModal::new("Invite URL Selection").field(
                 CreateInputText::new(InputTextStyle::Short, "Enter Invite URL", "invite_url")
-                    .placeholder("Please enter the invite URL you wish to use!")
+                    .placeholder("Please enter the Invite URL you wish to use!")
                     .min_length(20)
                     .max_length(100),
             );

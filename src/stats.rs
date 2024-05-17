@@ -17,16 +17,21 @@ pub async fn stats(ctx: Context<'_>) -> Result<(), Error> {
     let msg = CreateReply::default().embed(
         CreateEmbed::default()
             .title("Bot Stats")
-            .field("Bot version", VERSION, true)
-            .field("rustc", RUSTC_VERSION, true)
+            .field("Bot Version:", VERSION, true)
+            .field("Rustc Version:", RUSTC_VERSION, true)
             .field(
-                "Git Commit",
+                "Git Commit:",
                 GIT_SHA.to_string() + "(semver=" + GIT_SEMVER + ")",
                 true,
             )
-            .field("Commit Message", GIT_COMMIT_MSG, true)
-            .field("Built On", BUILD_CPU, true)
-            .field("Cargo Profile", CARGO_PROFILE, true),
+            .field("Commit Message:", GIT_COMMIT_MSG, true)
+            .field("Cargo Profile:", CARGO_PROFILE, true)
+            .field("Built On:", BUILD_CPU, true)
+            .field(
+                "Current Environment:",
+                crate::config::CURRENT_ENV.clone(),
+                true,
+            ),
     );
 
     ctx.send(msg).await?;
