@@ -16,7 +16,7 @@ pub const RUSTC_VERSION: &str = env!("VERGEN_RUSTC_SEMVER");
 pub async fn stats(ctx: Context<'_>) -> Result<(), Error> {
     let msg = CreateReply::default().embed(
         CreateEmbed::default()
-            .title("Bot Stats")
+            .title("Infernoplex Statistics")
             .field("Bot Version:", VERSION, true)
             .field("Rustc Version:", RUSTC_VERSION, true)
             .field(
