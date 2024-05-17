@@ -119,7 +119,7 @@ pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
                         ),
                     )
                     .await?;
-                    return Ok(());
+                    Ok(())
                 } else {
                     ctx.send(
                         CreateReply::new()
@@ -131,7 +131,7 @@ pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
                             .ephemeral(true),
                     )
                     .await?;
-                    return Ok(());
+                    Ok(())
                 }
             } else {
                 ctx.send(
@@ -144,7 +144,7 @@ pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
                         .ephemeral(true),
                 )
                 .await?;
-                return Ok(());
+                Ok(())
             }
         } else {
             ctx.send(
@@ -153,7 +153,7 @@ pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
                 )),
             )
             .await?;
-            return Ok(());
+            Ok(())
         }
     } else {
         ctx.send(
@@ -164,6 +164,6 @@ pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
             ),
         )
         .await?;
-        return Ok(());
+        Ok(())
     }
 }

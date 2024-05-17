@@ -9,8 +9,14 @@ use std::time::Duration;
 #[poise::command(prefix_command, slash_command, required_permissions = "MANAGE_GUILD")]
 pub async fn delete(ctx: Context<'_>) -> Result<(), Error> {
     if ctx.guild_id().is_none() {
-        ctx.say("This command can only be used in a server.")
-            .await?;
+        ctx.send(
+            CreateReply::new().embed(
+                CreateEmbed::new()
+                    .title("Error!")
+                    .description("This command can only be executed in a server!"),
+            ),
+        )
+        .await?;
         return Ok(());
     }
 
@@ -76,13 +82,25 @@ pub async fn delete(ctx: Context<'_>) -> Result<(), Error> {
             tx.commit().await?;
 
             // Finish interaction.
-            ctx.say("Server has been successfully deleted from Infinity List.")
-                .await?;
+            ctx.send(
+                CreateReply::new().embed(
+                    CreateEmbed::new()
+                        .title("All Done!")
+                        .description("All done :white_check_mark: "),
+                ),
+            )
+            .await?;
             return Ok(());
         }
     }
 
-    ctx.say("This server isn't listed on Infinity List. Run `/setup`, if you wish to list it.")
-        .await?;
+    ctx.send(
+        CreateReply::new().embed(
+            CreateEmbed::new()
+                .title("Error!")
+                .description("This server is not on Infinity List! Run `/setup` to enlist it!"),
+        ),
+    )
+    .await?;
     return Ok(());
 }
