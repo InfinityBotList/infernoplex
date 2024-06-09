@@ -27,5 +27,5 @@ promoteprod:
 
 ts:
 	rm -rvf $(CDN_PATH)/dev/bindings/infernoplex
-	cargo test
-	cp -rf bindings/.generated $(CDN_PATH)/dev/bindings/infernoplex
+	#cargo test
+	#cp -rf bindings/.generated $(CDN_PATH)/dev/bindings/infernoplex
