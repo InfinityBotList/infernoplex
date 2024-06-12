@@ -1,6 +1,8 @@
 /// Module to convert images to webp format
 ///
 /// This internally just calls cwebp/gif2webp, so you need to have that installed
+///
+/// The output is stored in the ``fpath`` file. The returned String contains the stdout and stderr returned from cwebp/gif2webp
 pub fn image_to_webp(name: &str, fpath: String, b: &[u8]) -> Result<String, crate::Error> {
     // Create temp file
     let tmp_id = botox::crypto::gen_random(128);

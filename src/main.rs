@@ -45,14 +45,17 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
         poise::FrameworkError::Command { error, ctx, .. } => {
             error!("Error in command `{}`: {:?}", ctx.command().name, error,);
             let err = ctx
-                .say(format!(
-                    "There was an error running this command: {}",
-                    error
-                ))
+                .send(
+                    poise::CreateReply::new().embed(
+                        serenity::all::CreateEmbed::new()
+                            .title("Whoa There!")
+                            .description(error.to_string()),
+                    ),
+                )
                 .await;
 
             if let Err(e) = err {
-                error!("SQLX Error: {}", e);
+                error!("on_error returned error: {}", e);
             }
         }
         poise::FrameworkError::CommandCheckFailed { error, ctx, .. } => {
@@ -101,6 +104,43 @@ async fn event_listener<'a>(
 
                     CONNECT_STATE.write().await.has_started_bgtasks = true;
                 }
+            }
+        }
+        FullEvent::GuildMemberUpdate { new, .. } => {
+            let Some(member) = new else {
+                return Err("GuildMemberUpdate: Member not found".into());
+            };
+
+            if member.user.bot() {
+                return Ok(());
+            }
+
+            let pool = &ctx.user_data().pool;
+
+            let permissions = member.permissions(&ctx.serenity_context.cache)?;
+
+            if !permissions.administrator() {
+                // Delete them if service is infernoplex
+                let res = sqlx::query!(
+                    "SELECT team_owner FROM servers WHERE server_id = $1",
+                    member.guild_id.to_string(),
+                )
+                .fetch_optional(pool)
+                .await?;
+
+                let team_owner = match res {
+                    Some(row) => row.team_owner,
+                    None => return Ok(()),
+                };
+
+                // Delete them if added_by is infernoplex using a delete statement
+                sqlx::query!(
+                    "DELETE FROM team_members WHERE team_id = $1 AND user_id = $2 AND service = 'infernoplex'",
+                    team_owner,
+                    member.user.id.to_string(),
+                )
+                .execute(pool)
+                .await?;
             }
         }
         FullEvent::GuildMemberRemoval { guild_id, user, .. } => {

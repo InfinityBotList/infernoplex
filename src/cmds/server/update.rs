@@ -9,38 +9,48 @@ use poise::{
 };
 use std::time::Duration;
 
-/// Update your server information on Infinity List, needs 'Manage Server' permissions
-#[poise::command(prefix_command, slash_command, required_permissions = "MANAGE_GUILD")]
-pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
-    if let Some(guild_id) = ctx.guild_id() {
-        let server_id = guild_id.to_string();
+async fn _update_check(ctx: Context<'_>) -> Result<bool, Error> {
+    crate::splashtail::perms::check_for_permission(&ctx, "server.edit").await?;
+    Ok(true)
+}
 
-        // Check if the server is already setup
-        let res = sqlx::query!(
-            "SELECT COUNT(*) as count FROM servers WHERE server_id = $1",
-            server_id
-        )
-        .fetch_one(&ctx.data().pool)
-        .await?;
+#[derive(poise::ChoiceParameter)]
+enum UpdatePane {
+    #[name = "Basic Server Information"]
+    BasicInfo,
+    #[name = "Server Invite"]
+    Invite,
+}
 
-        if res.count.unwrap_or(0) > 0 {
+/// Update your server information on Infinity List, needs 'server.edit' permissions
+#[poise::command(prefix_command, slash_command, check = "_update_check")]
+pub async fn update(
+    ctx: Context<'_>,
+    #[description = "The pane to update"] pane: UpdatePane,
+) -> Result<(), Error> {
+    let Some(guild_id) = ctx.guild_id() else {
+        return Err("This command can only be executed in a server".into());
+    };
+
+    match pane {
+        UpdatePane::BasicInfo => {
             // Create a button with next+cancel options
             let builder = CreateReply::default()
-                .embed(
-                    CreateEmbed::new()
-                        .title("Update Server Information")
-                        .description("Oh, hello there :eyes:\nI see you want to update your server listing on Infinity List! Let's get started!")
-                )
-                .components(vec![
-                    CreateActionRow::Buttons(vec![
-                        CreateButton::new("next")
-                            .label("Next")
-                            .style(ButtonStyle::Primary),
-                        CreateButton::new("cancel")
-                            .label("Cancel")
-                            .style(ButtonStyle::Danger)
-                    ])
-                ]);
+            .embed(
+                CreateEmbed::new()
+                    .title("Update Server Information")
+                    .description("Oh, hello there :eyes:\nI see you want to update your server listing on Infinity List! Let's get started!")
+            )
+            .components(vec![
+                CreateActionRow::Buttons(vec![
+                    CreateButton::new("next")
+                        .label("Next")
+                        .style(ButtonStyle::Primary),
+                    CreateButton::new("cancel")
+                        .label("Cancel")
+                        .style(ButtonStyle::Danger)
+                ])
+            ]);
 
             let mut msg = ctx.send(builder.clone()).await?.into_message().await?;
 
@@ -103,7 +113,7 @@ pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
                     // Update the server information in the database
                     sqlx::query!(
                         "UPDATE servers SET short = $2, long = $3 WHERE server_id = $1",
-                        server_id,
+                        guild_id.to_string(),
                         &inputs[1].to_string(),
                         &inputs[2].to_string(),
                     )
@@ -119,7 +129,6 @@ pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
                         ),
                     )
                     .await?;
-                    Ok(())
                 } else {
                     ctx.send(
                         CreateReply::new()
@@ -131,7 +140,6 @@ pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
                             .ephemeral(true),
                     )
                     .await?;
-                    Ok(())
                 }
             } else {
                 ctx.send(
@@ -144,26 +152,30 @@ pub async fn update(ctx: Context<'_>) -> Result<(), Error> {
                         .ephemeral(true),
                 )
                 .await?;
-                Ok(())
             }
-        } else {
+        }
+        UpdatePane::Invite => {
+            let invite = crate::splashtail::invite::setup_invite_view(&ctx).await?;
+
+            // Save to the database
+            sqlx::query!(
+                "UPDATE servers SET invite = $2 WHERE server_id = $1",
+                guild_id.to_string(),
+                invite
+            )
+            .execute(&ctx.data().pool)
+            .await?;
+
             ctx.send(
-                CreateReply::new().embed(CreateEmbed::new().title("Error").description(
-                    "This server is not listed on Infinity List. Please run `/setup`",
-                )),
+                CreateReply::new().embed(
+                    CreateEmbed::new()
+                        .title("All Done!")
+                        .description("All done :white_check_mark:"),
+                ),
             )
             .await?;
-            Ok(())
         }
-    } else {
-        ctx.send(
-            CreateReply::new().embed(
-                CreateEmbed::new()
-                    .title("Error")
-                    .description("This command can only be executed on a server."),
-            ),
-        )
-        .await?;
-        Ok(())
     }
+
+    Ok(())
 }

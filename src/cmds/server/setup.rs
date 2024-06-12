@@ -11,8 +11,8 @@ use poise::{
 
 use crate::{Context, Error};
 
-/// Sets up a server, needs 'Manage Server' permissions
-#[poise::command(prefix_command, slash_command, required_permissions = "MANAGE_GUILD")]
+/// Sets up a server, needs 'Administrator' permissions on the author
+#[poise::command(prefix_command, slash_command, required_permissions = "ADMINISTRATOR")]
 pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
     let guild: serenity::all::Guild = {
         let Some(cached_guild) = ctx.guild() else {
