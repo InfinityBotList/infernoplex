@@ -14,13 +14,15 @@ use crate::{Context, Error};
 /// Sets up a server, needs 'Manage Server' permissions
 #[poise::command(prefix_command, slash_command, required_permissions = "MANAGE_GUILD")]
 pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
-    if ctx.guild_id().is_none() {
-        ctx.say("This command can only be used in a server.")
-            .await?;
-        return Ok(());
-    }
+    let guild: serenity::all::Guild = {
+        let Some(cached_guild) = ctx.guild() else {
+            return Err("This command must be run in a server!".into());
+        };
 
-    let server_id = ctx.guild_id().ok_or("No guild id")?.to_string();
+        cached_guild.clone() // Clone to avoid Sync issues
+    };
+
+    let server_id = guild.id.to_string();
 
     // Check if the server is already setup
     let res = sqlx::query!(
@@ -280,15 +282,32 @@ Notes:
         .await?;
     }
 
-    // Then add to team
+    // Then add author to team
     sqlx::query!(
         "INSERT INTO team_members (team_id, user_id, flags) VALUES ($1, $2, $3)",
         team_id.id,
         ctx.author().id.to_string(),
-        &["global.*".to_string(),]
+        &["server.*".to_string(),]
     )
     .execute(&mut *tx)
     .await?;
+
+    // Add all administrators
+    for member in guild.members {
+        let member_permissions = member.permissions(ctx.cache())?;
+
+        if member_permissions.administrator() {
+            // Then add administrator to team
+            sqlx::query!(
+                "INSERT INTO team_members (team_id, user_id, flags) VALUES ($1, $2, $3)",
+                team_id.id,
+                ctx.author().id.to_string(),
+                &["server.*".to_string(),]
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
 
     // Create a vanity for the server
     let vanity_count = sqlx::query!(
@@ -334,7 +353,8 @@ Notes:
             long,
             invite,
             vanity_ref,
-            extra_links
+            extra_links,
+            nsfw
         ) VALUES (
             $1, 
             $2, 
@@ -346,7 +366,8 @@ Notes:
             $8,
             $9,
             $10,
-            $11
+            $11,
+            $12
         )",
         server_id,
         guild_stats.name.to_string(),
@@ -358,7 +379,8 @@ Notes:
         &inputs[2].to_string(),
         invite,
         vanity_tag.itag,
-        serde_json::Value::Array(vec![])
+        serde_json::Value::Array(vec![]),
+        guild_stats.nsfw
     )
     .execute(&mut *tx)
     .await?;

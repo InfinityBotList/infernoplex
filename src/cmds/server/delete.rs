@@ -5,7 +5,7 @@ use poise::{
 };
 use std::time::Duration;
 
-/// Delete your server from Infinity List, needs 'Manage Server' permissions
+/// Delete your server from Infinity List, needs 'servers.delete' permissions
 #[poise::command(prefix_command, slash_command, required_permissions = "MANAGE_GUILD")]
 pub async fn delete(ctx: Context<'_>) -> Result<(), Error> {
     if ctx.guild_id().is_none() {

@@ -9,6 +9,7 @@ pub struct GuildStats {
     pub owner: UserId,
     pub total_members: usize,
     pub online_members: usize,
+    pub nsfw: bool,
 }
 
 impl GuildStats {
@@ -27,6 +28,7 @@ impl GuildStats {
                 .iter()
                 .filter(|p| p.status != serenity::model::prelude::OnlineStatus::Offline)
                 .count(),
+            nsfw: matches!(guild.nsfw_level, serenity::all::NsfwLevel::Explicit),
         })
     }
 
