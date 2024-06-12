@@ -103,6 +103,31 @@ async fn event_listener<'a>(
                 }
             }
         }
+        FullEvent::GuildMemberRemoval { guild_id, user, .. } => {
+            // Check the team the server is on, delete them if service is infernoplex
+            let pool = &ctx.user_data().pool;
+
+            let res = sqlx::query!(
+                "SELECT team_owner FROM servers WHERE server_id = $1",
+                guild_id.to_string(),
+            )
+            .fetch_optional(pool)
+            .await?;
+
+            let team_owner = match res {
+                Some(row) => row.team_owner,
+                None => return Ok(()),
+            };
+
+            // Delete them if added_by is infernoplex using a delete statement
+            sqlx::query!(
+                "DELETE FROM team_members WHERE team_id = $1 AND user_id = $2 AND service = 'infernoplex'",
+                team_owner,
+                user.id.to_string(),
+            )
+            .execute(pool)
+            .await?;
+        }
         _ => {}
     }
 

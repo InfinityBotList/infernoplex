@@ -75,6 +75,19 @@ pub async fn delete(ctx: Context<'_>) -> Result<(), Error> {
             // Delete Server
             let mut tx = ctx.data().pool.begin().await?;
 
+            // Get the servers vanity
+            let vanity = sqlx::query!(
+                "SELECT vanity_ref FROM servers WHERE server_id = $1",
+                server_id
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+
+            // Delete the vanity
+            sqlx::query!("DELETE FROM vanity WHERE itag = $1", vanity.vanity_ref)
+                .execute(&mut *tx)
+                .await?;
+
             sqlx::query!("DELETE FROM servers WHERE server_id = $1", server_id)
                 .execute(&mut *tx)
                 .await?;

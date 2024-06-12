@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO vanity (code, target_id, target_type) VALUES ($1, $2, $3) RETURNING itag",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "itag",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        },
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ce5ced433cdefe9b5fd247a1b9a81d9f41cad68e1dbda44659a01928da0681a7"
+}

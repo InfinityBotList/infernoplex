@@ -70,7 +70,7 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
             .description("
 The following setup will now be performed:
 
-- A new team will be created for your server. The server owner and the caller of this command will be its initial members. You can add more members later through `Team Settings`.
+- A new team will be created for your server. The server owner as well as all administrators will then be able to manage this servers listing. You can add more members later through `Team Settings`.
 - This server will be added and will be owned by the team. Note that you can transfer ownership of this team to anyone on Infinity Bot List if you want to.
 - The server created will be set as a `draft` and will not be visible until it is published.
 
@@ -196,14 +196,28 @@ Notes:
     // Get guild stats
     let guild_stats = crate::splashtail::stats::GuildStats::from_ctx(&ctx)?;
 
-    // Create a new team
+    // Create a new team with a random vanity
     let mut tx = ctx.data().pool.begin().await?;
 
-    let team_id = sqlx::query!(
-        "INSERT INTO teams (name) VALUES ($1) RETURNING id",
-        format!("{}'s Team", guild_stats.name),
+    let team_id = sqlx::types::uuid::Uuid::new_v4();
+    let team_vanity = botox::crypto::gen_random(256);
+
+    let vanity_tag = sqlx::query!(
+        "INSERT INTO vanity (code, target_id, target_type) VALUES ($1, $2, $3) RETURNING itag",
+        team_vanity,
+        team_id.to_string(),
+        "team"
     )
     .fetch_one(&mut *tx)
+    .await?;
+
+    sqlx::query!(
+        "INSERT INTO teams (id, name, vanity_ref) VALUES ($1, $2, $3)",
+        team_id,
+        format!("{}'s Team", guild_stats.name),
+        vanity_tag.itag
+    )
+    .execute(&mut *tx)
     .await?;
 
     // Save team avatar to {cdn_main_scope_path}/avatars/teams/{team_id}.webp
@@ -215,7 +229,7 @@ Notes:
         format!(
             "{}/avatars/teams/{}.webp",
             crate::config::CONFIG.cdn_main_scope_path,
-            team_id.id
+            team_id
         ),
         &img_bytes.clone(),
     )
@@ -254,54 +268,47 @@ Notes:
 
     // Add owner with Global Owner permission
     sqlx::query!(
-        "INSERT INTO team_members (team_id, user_id, flags) VALUES ($1, $2, $3)",
-        team_id.id,
+        "INSERT INTO team_members (team_id, user_id, flags, service) VALUES ($1, $2, $3, 'infernoplex')",
+        team_id,
         guild_stats.owner.to_string(),
         &["global.*".to_string()]
     )
     .execute(&mut *tx)
     .await?;
 
-    // Add the user calling the command to the team
-    // First ensure the user is a ibl user
-    let res = sqlx::query!(
-        "SELECT COUNT(*) FROM users WHERE user_id = $1",
-        ctx.author().id.to_string()
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-
-    if res.count.unwrap_or(0) == 0 {
-        sqlx::query!(
-            "INSERT INTO users (user_id, api_token, extra_links, developer, certified) VALUES ($1, $2, $3, false, false)",
-            ctx.author().id.to_string(),
-            botox::crypto::gen_random(138),
-            sqlx::types::JsonValue::Array(vec![]),
-        )
-        .execute(&mut *tx)
-        .await?;
-    }
-
-    // Then add author to team
-    sqlx::query!(
-        "INSERT INTO team_members (team_id, user_id, flags) VALUES ($1, $2, $3)",
-        team_id.id,
-        ctx.author().id.to_string(),
-        &["server.*".to_string(),]
-    )
-    .execute(&mut *tx)
-    .await?;
-
     // Add all administrators
     for member in guild.members {
+        if member.user.id == guild_stats.owner || member.user.bot() {
+            continue;
+        }
+
         let member_permissions = member.permissions(ctx.cache())?;
 
         if member_permissions.administrator() {
             // Then add administrator to team
+            // First ensure the user is a ibl user
+            let res = sqlx::query!(
+                "SELECT COUNT(*) FROM users WHERE user_id = $1",
+                member.user.id.to_string()
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+
+            if res.count.unwrap_or(0) == 0 {
+                sqlx::query!(
+                    "INSERT INTO users (user_id, api_token, extra_links, developer, certified) VALUES ($1, $2, $3, false, false)",
+                    member.user.id.to_string(),
+                    botox::crypto::gen_random(138),
+                    sqlx::types::JsonValue::Array(vec![]),
+                )
+                .execute(&mut *tx)
+                .await?;
+            }
+
             sqlx::query!(
-                "INSERT INTO team_members (team_id, user_id, flags) VALUES ($1, $2, $3)",
-                team_id.id,
-                ctx.author().id.to_string(),
+                "INSERT INTO team_members (team_id, user_id, flags, service) VALUES ($1, $2, $3, 'infernoplex')",
+                team_id,
+                member.user.id.to_string(),
                 &["server.*".to_string(),]
             )
             .execute(&mut *tx)
@@ -371,7 +378,7 @@ Notes:
         )",
         server_id,
         guild_stats.name.to_string(),
-        team_id.id,
+        team_id,
         botox::crypto::gen_random(138),
         i32::try_from(guild_stats.total_members)?,
         i32::try_from(guild_stats.online_members)?,
