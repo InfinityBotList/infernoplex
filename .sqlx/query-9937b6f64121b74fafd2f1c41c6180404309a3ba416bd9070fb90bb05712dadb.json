@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO teams (id, name, vanity_ref) VALUES ($1, $2, $3)",
+  "query": "INSERT INTO teams (id, name, vanity_ref, service) VALUES ($1, $2, $3, 'infernoplex')",
   "describe": {
     "columns": [],
     "parameters": {
@@ -12,5 +12,5 @@
     },
     "nullable": []
   },
-  "hash": "c4ea6a38d00c4366ccdf10c83a6def0c5b415d5b3ac557333686fcaa1c3a3c4d"
+  "hash": "9937b6f64121b74fafd2f1c41c6180404309a3ba416bd9070fb90bb05712dadb"
 }
