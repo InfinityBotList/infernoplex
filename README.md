@@ -1,10 +1,10 @@
 # Infernoplex
 
-Infernoplex is the server listing bot for Infinity Bot List. *Self-hosting is not officially supported. Licensed under the AGPLv3*
+Infernoplex is the server listing bot for Infinity List. *Self-hosting is not officially supported. Licensed under the AGPLv3*
 
 ## Database Seeds
 
-You can find a seed of the Infinity Bot List database at https://reedwhisker.infinitybots.gg/help/contribute/seedguide. This seed is public and available for all contributors
+You can find a seed of the Infinity List database at https://reedwhisker.infinitybots.gg/help/contribute/seedguide. This seed is public and available for all contributors
 
 ## Contributing
 

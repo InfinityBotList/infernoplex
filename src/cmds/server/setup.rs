@@ -71,11 +71,11 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
 The following setup will now be performed:
 
 - A new team will be created for your server. The server owner as well as all administrators will then be able to manage this servers listing. You can add more members later through `Team Settings`.
-- This server will be added and will be owned by the team. Note that you can transfer ownership of this team to anyone on Infinity Bot List if you want to.
+- This server will be added and will be owned by the team. Note that you can transfer ownership of this team to anyone on Infinity List if you want to.
 - The server created will be set as a `draft` and will not be visible until it is published.
 
 Notes: 
-- If you wish to recover access to this server (rogue moderator/admin etc) within Infinity Bot List, please contact [support](https://infinitybots.gg/redirect/discord)
+- If you wish to recover access to this server (rogue moderator/admin etc) within Infinity List, please contact [support](https://infinitybots.gg/redirect/discord)
 - **Please now prepare a short and long description for your server.** You can change these later through `Server Settings` on the website.
 - By continuing, you agree that you have read and understood the [Terms of Service](https://infinitybots.gg/legal/terms)
             ")
