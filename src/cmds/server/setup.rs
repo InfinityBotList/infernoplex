@@ -212,7 +212,7 @@ Notes:
     .await?;
 
     sqlx::query!(
-        "INSERT INTO teams (id, name, vanity_ref) VALUES ($1, $2, $3)",
+        "INSERT INTO teams (id, name, vanity_ref, service) VALUES ($1, $2, $3, 'infernoplex')",
         team_id,
         format!("{}'s Team", guild_stats.name),
         vanity_tag.itag
