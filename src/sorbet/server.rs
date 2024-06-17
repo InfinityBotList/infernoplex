@@ -1,5 +1,6 @@
 use std::{fmt::Display, str::FromStr, sync::Arc};
 
+use crate::shadowclaw::invite::{CreateInviteForUserError, CreateInviteForUserResult};
 use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderMap, HeaderName};
 use axum::{
@@ -54,7 +55,14 @@ pub async fn setup_server(
 ) {
     use utoipa::OpenApi;
     #[derive(OpenApi)]
-    #[openapi(paths(query), components(schemas(InfernoplexQuery,)))]
+    #[openapi(
+        paths(query),
+        components(schemas(
+            InfernoplexQuery,
+            CreateInviteForUserResult,
+            CreateInviteForUserError
+        ))
+    )]
     struct ApiDoc;
 
     async fn docs() -> impl IntoResponse {
@@ -119,22 +127,49 @@ pub enum InfernoplexQuery {
     },
 }
 
-/// Make Panel Query
+#[derive(Serialize, Deserialize, ToSchema, TS, Display, Clone, VariantNames)]
+#[ts(export, export_to = ".generated/InfernoplexResponse.ts")]
+pub enum InfernoplexResponse {
+    /// The result of calling CreateInvite
+    CreateInvite {
+        /// Successfully created an invite
+        ok: Option<CreateInviteForUserResult>,
+        /// Failed to create an invite
+        err: Option<CreateInviteForUserError>,
+    },
+}
+
+impl IntoResponse for InfernoplexResponse {
+    fn into_response(self) -> Response {
+        let status = match &self {
+            InfernoplexResponse::CreateInvite { ok, .. } => {
+                if ok.is_some() {
+                    StatusCode::OK
+                } else {
+                    StatusCode::BAD_REQUEST
+                }
+            }
+        };
+        (status, self).into_response()
+    }
+}
+
+/// Make Infernoplex Query
 #[utoipa::path(
     post,
-    request_body = PanelQuery,
+    request_body = InfernoplexQuery,
     path = "/",
     responses(
-        (status = 200, description = "Content", body = String),
-        (status = 204, description = "No content"),
-        (status = BAD_REQUEST, description = "An error occured", body = String),
+        (status = 200, description = "The response of the query", body = InfernoplexResponse),
+        (status = BAD_REQUEST, description = "An error occured performing the requested action", body = InfernoplexResponse),
+        (status = INTERNAL_SERVER_ERROR, description = "An error occured performing the requested action", body = String),
     ),
 )]
 #[axum::debug_handler]
 async fn query(
     State(state): State<Arc<AppState>>,
     Json(req): Json<InfernoplexQuery>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<InfernoplexResponse, Error> {
     match req {
         InfernoplexQuery::CreateInvite { guild_id, session } => {
             let guild_id: serenity::all::GuildId = guild_id.parse().map_err(Error::new)?;
@@ -174,8 +209,14 @@ async fn query(
             .await;
 
             match created_invite {
-                Ok(invite) => Ok((StatusCode::OK, Json(invite)).into_response()),
-                Err(e) => Ok((StatusCode::UNAUTHORIZED, Json(e)).into_response()),
+                Ok(invite) => Ok(InfernoplexResponse::CreateInvite {
+                    ok: Some(invite),
+                    err: None,
+                }),
+                Err(e) => Ok(InfernoplexResponse::CreateInvite {
+                    ok: None,
+                    err: Some(e),
+                }),
             }
         }
     }
