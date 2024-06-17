@@ -18,6 +18,10 @@ use sqlx::types::chrono;
 ///
 /// This returns a string which is the invite selected by the user
 pub async fn setup_invite_view(ctx: &Context<'_>) -> Result<String, Error> {
+    let Some(guild_id) = ctx.guild_id() else {
+        return Err("This operation can only be performed in a server".into());
+    };
+
     let builder = CreateReply::new()
         .embed(
             CreateEmbed::new()
@@ -81,74 +85,128 @@ Okay! Now, let's setup the invite for this server! To get started, choose which 
         )
         .await?; // remove buttons after button press
 
-        if id == "cancel" {
-            return Err("Setup cancelled".into());
-        }
+        let res = match id.as_str() {
+            "cancel" => return Err("Setup cancelled".into()),
+            "invite_url" => {
+                // Ask for invite url now
+                let qm = CreateQuickModal::new("Invite URL Selection").field(
+                    CreateInputText::new(InputTextStyle::Short, "Enter Invite URL", "invite_url")
+                        .placeholder("Please enter the Invite URL you wish to use!")
+                        .min_length(20)
+                        .max_length(100),
+                );
 
-        if id == "invite_url" {
-            // Ask for invite url now
-            let qm = CreateQuickModal::new("Invite URL Selection").field(
-                CreateInputText::new(InputTextStyle::Short, "Enter Invite URL", "invite_url")
-                    .placeholder("Please enter the Invite URL you wish to use!")
-                    .min_length(20)
-                    .max_length(100),
-            );
+                if let Some(resp) = m.quick_modal(ctx.serenity_context(), qm).await? {
+                    let inputs = resp.inputs;
 
-            if let Some(resp) = m.quick_modal(ctx.serenity_context(), qm).await? {
-                let inputs = resp.inputs;
+                    let invite_url = &inputs[0];
 
-                let invite_url = &inputs[0];
-
-                resp.interaction
-                    .create_response(
-                        ctx.http(),
-                        CreateInteractionResponse::Message(
-                            CreateInteractionResponseMessage::default().embed(
-                                CreateEmbed::new()
-                                    .title("Resolving invite")
-                                    .description(format!(
-                                        "Please wait while we try to resolve this invite: {}",
-                                        invite_url
-                                    )),
+                    resp.interaction
+                        .create_response(
+                            ctx.http(),
+                            CreateInteractionResponse::Message(
+                                CreateInteractionResponseMessage::default().embed(
+                                    CreateEmbed::new().title("Resolving invite").description(
+                                        format!(
+                                            "Please wait while we try to resolve this invite: {}",
+                                            invite_url
+                                        ),
+                                    ),
+                                ),
                             ),
-                        ),
-                    )
-                    .await?;
+                        )
+                        .await?;
 
-                if let Err(e) = resolve_invite(ctx, invite_url).await {
+                    if let Err(e) = resolve_invite(ctx, invite_url).await {
+                        resp.interaction
+                            .edit_response(
+                                ctx.http(),
+                                EditInteractionResponse::new().embed(
+                                    CreateEmbed::new()
+                                        .title("Error resolving invite")
+                                        .description(format!(
+                                            "This invite could not be resolved: {}",
+                                            e
+                                        )),
+                                ),
+                            )
+                            .await?;
+
+                        return Err(format!("Error resolving invite: {}", e).into());
+                    }
+
                     resp.interaction
                         .edit_response(
                             ctx.http(),
                             EditInteractionResponse::new().embed(
                                 CreateEmbed::new()
-                                    .title("Error resolving invite")
-                                    .description(format!(
-                                        "This invite could not be resolved: {}",
-                                        e
-                                    )),
+                                    .title("Resolved invite successfully!")
+                                    .description(format!("You have inputted: {}", invite_url)),
                             ),
                         )
                         .await?;
 
-                    return Err(format!("Error resolving invite: {}", e).into());
+                    format!("invite_url:{}", invite_url)
+                } else {
+                    return Err("Timed out waiting for response for invite URL".into());
                 }
-
-                resp.interaction
-                    .edit_response(
-                        ctx.http(),
-                        EditInteractionResponse::new().embed(
-                            CreateEmbed::new()
-                                .title("Resolved invite successfully!")
-                                .description(format!("You have inputted: {}", invite_url)),
-                        ),
-                    )
-                    .await?;
-
-                return Ok(id.to_string() + ":" + invite_url);
-            } else {
-                return Err("Timed out waiting for response for invite URL".into());
             }
-        }
+            "per_user" => {
+                // Ask the user to pick a channel
+                let qm = CreateQuickModal::new("Per-User Invite Selection")
+                    .field(
+                        CreateInputText::new(InputTextStyle::Short, "Enter Channel ID", "channel_id")
+                            .placeholder("Please enter the Channel ID you wish to use!")
+                            .min_length(18)
+                            .max_length(18)
+                            .required(true),
+                    )
+                    .field(
+                        CreateInputText::new(InputTextStyle::Short, "Max Uses", "max_uses")
+                            .placeholder("How many times should a per-user invite be usable for. Use 1 if unsure")
+                            .min_length(1)
+                            .max_length(3)
+                            .required(true),
+                    )
+                    .field(
+                        CreateInputText::new(InputTextStyle::Short, "Max Age", "max_age")
+                            .placeholder("How long should the invite be valid for. Use 0 if unsure")
+                            .min_length(1)
+                            .max_length(3)
+                            .required(true)
+                    );
+
+                if let Some(resp) = m.quick_modal(ctx.serenity_context(), qm).await? {
+                    let inputs = resp.inputs;
+
+                    let channel_id: serenity::all::ChannelId = inputs[0].parse()?;
+
+                    // Fetch the channel
+                    let channel = channel_id.to_channel(ctx).await?;
+
+                    match channel {
+                        serenity::all::Channel::Private(_) => {
+                            return Err("Channel must be a guild channel".into())
+                        }
+                        serenity::all::Channel::Guild(c) => {
+                            if c.guild_id != guild_id {
+                                return Err("Channel must be in this server".into());
+                            }
+                        }
+                        _ => return Err("Channel must be a guild channel".into()),
+                    }
+
+                    let max_uses: u8 = inputs[1].parse()?;
+                    let max_age: u32 = inputs[2].parse()?;
+
+                    format!("per_user:{}:{}:{}", channel_id, max_uses, max_age)
+                } else {
+                    return Err("Timed out waiting for response for channel ID".into());
+                }
+            }
+            "none" => "none".to_string(),
+            _ => return Err("Invalid choice".into()),
+        };
 
         m.create_response(
             ctx.http(),
@@ -162,7 +220,7 @@ Okay! Now, let's setup the invite for this server! To get started, choose which 
         )
         .await?;
 
-        Ok(id.to_string())
+        Ok(res.to_string())
     } else {
         Err("Timed out waiting for choice".into())
     }
@@ -206,4 +264,116 @@ async fn resolve_invite(ctx: &Context<'_>, invite: &str) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub enum CreateInviteForUserError {
+    Generic(String),
+    ServerNotFound,
+    UserIsBlacklisted,
+    ServerHasNoInvite,
+    ServerHasInvalidInvite,
+}
+
+impl core::fmt::Display for CreateInviteForUserError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            CreateInviteForUserError::Generic(s) => write!(f, "{}", s),
+            CreateInviteForUserError::ServerNotFound => write!(f, "Server not found"),
+            CreateInviteForUserError::UserIsBlacklisted => {
+                write!(f, "User is blacklisted from this server")
+            }
+            CreateInviteForUserError::ServerHasNoInvite => write!(f, "Server has no invite"),
+            CreateInviteForUserError::ServerHasInvalidInvite => {
+                write!(f, "Server has an invalid invite")
+            }
+        }
+    }
+}
+
+pub enum CreateInviteForUserResult {
+    Invite(String),
+}
+
+/// Creates an invite for a user in a guild
+///
+/// TODO: Improve this with more features if needed (such as whitelist-only servers)
+pub async fn create_invite_for_user(
+    ctx: &serenity::all::Context,
+    guild_id: serenity::all::GuildId,
+    user_id: serenity::all::UserId,
+) -> Result<CreateInviteForUserResult, CreateInviteForUserError> {
+    let data = ctx.data::<crate::Data>();
+    let row = sqlx::query!(
+        "SELECT blacklisted_users, invite, type, state FROM servers WHERE server_id = $1",
+        guild_id.to_string()
+    )
+    .fetch_optional(&data.pool)
+    .await
+    .map_err(|e| {
+        log::error!("Failed to fetch server data: {}", e);
+        CreateInviteForUserError::Generic("Failed to fetch server data".into())
+    })?;
+
+    let row = match row {
+        Some(r) => r,
+        None => return Err(CreateInviteForUserError::ServerNotFound),
+    };
+
+    if row.blacklisted_users.contains(&user_id.to_string()) {
+        return Err(CreateInviteForUserError::UserIsBlacklisted);
+    }
+
+    if row.invite == "none" {
+        return Err(CreateInviteForUserError::ServerHasNoInvite);
+    }
+
+    let invite_splitted = row.invite.split(':').collect::<Vec<_>>();
+
+    if invite_splitted.len() < 2 {
+        return Err(CreateInviteForUserError::ServerHasInvalidInvite);
+    }
+
+    match invite_splitted[0] {
+        "invite_url" => {
+            let invite = invite_splitted[1];
+            Ok(CreateInviteForUserResult::Invite(invite.to_string()))
+        }
+        "per_user" => {
+            let channel_id = invite_splitted[1]
+                .parse::<serenity::all::ChannelId>()
+                .map_err(|_| CreateInviteForUserError::ServerHasInvalidInvite)?;
+            let max_uses = if invite_splitted.len() >= 3 {
+                invite_splitted[2]
+                    .parse::<u8>()
+                    .map_err(|_| CreateInviteForUserError::ServerHasInvalidInvite)?
+            } else {
+                1 // default to 1
+            };
+            let max_age = if invite_splitted.len() >= 4 {
+                invite_splitted[3]
+                    .parse::<u32>()
+                    .map_err(|_| CreateInviteForUserError::ServerHasInvalidInvite)?
+            } else {
+                300 // default to 5 minutes
+            };
+
+            let invite = channel_id
+                .create_invite(
+                    ctx.http(),
+                    serenity::all::CreateInvite::default()
+                        .max_uses(max_uses)
+                        .max_age(max_age)
+                        .unique(true),
+                )
+                .await
+                .map_err(|e| {
+                    log::error!("Failed to create invite: {}", e);
+                    CreateInviteForUserError::Generic(format!("Failed to create invite: {}", e))
+                })?;
+
+            Ok(CreateInviteForUserResult::Invite(invite.url()))
+        }
+        _ => Err(CreateInviteForUserError::ServerHasInvalidInvite),
+    }
 }

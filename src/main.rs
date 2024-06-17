@@ -191,12 +191,28 @@ async fn main() {
             .build(),
     );
 
-    let client_builder = serenity::all::ClientBuilder::new_with_http(
-        http,
-        serenity::all::GatewayIntents::default()
-            | serenity::all::GatewayIntents::GUILD_MEMBERS
-            | serenity::all::GatewayIntents::GUILD_PRESENCES,
-    );
+    // Fetch the application to check for privileged intents
+    let application_info = http
+        .get_current_application_info()
+        .await
+        .expect("Could not get app info");
+    let application_flags = application_info.flags.unwrap();
+
+    let mut intents = serenity::all::GatewayIntents::default();
+
+    if application_flags.contains(serenity::all::ApplicationFlags::GATEWAY_GUILD_MEMBERS_LIMITED)
+        | application_flags.contains(serenity::all::ApplicationFlags::GATEWAY_GUILD_MEMBERS)
+    {
+        intents |= serenity::all::GatewayIntents::GUILD_MEMBERS;
+    }
+
+    if application_flags.contains(serenity::all::ApplicationFlags::GATEWAY_PRESENCE_LIMITED)
+        | application_flags.contains(serenity::all::ApplicationFlags::GATEWAY_PRESENCE)
+    {
+        intents |= serenity::all::GatewayIntents::GUILD_PRESENCES;
+    }
+
+    let client_builder = serenity::all::ClientBuilder::new_with_http(http, intents);
 
     let data = Data {
         pool: PgPoolOptions::new()
