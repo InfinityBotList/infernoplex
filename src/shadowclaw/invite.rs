@@ -270,36 +270,38 @@ async fn resolve_invite(ctx: &Context<'_>, invite: &str) -> Result<(), Error> {
     Ok(())
 }
 
+/// Represents the error that can occur when creating an invite for a user
 #[derive(Serialize, Deserialize, ToSchema, TS, Clone, VariantNames)]
 #[ts(export, export_to = ".generated/CreateInviteForUserError.ts")]
 pub enum CreateInviteForUserError {
     Generic { message: String },
-    ServerNotFound,
-    ServerNeedsLoginForInvite,
-    UserIsBlacklisted,
-    ServerHasNoInvite,
-    ServerHasInvalidInvite,
+    ServerNotFound {},
+    ServerNeedsLoginForInvite {},
+    UserIsBlacklisted {},
+    ServerHasNoInvite {},
+    ServerHasInvalidInvite {},
 }
 
 impl core::fmt::Display for CreateInviteForUserError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             CreateInviteForUserError::Generic { message } => write!(f, "{}", message),
-            CreateInviteForUserError::ServerNotFound => write!(f, "Server not found"),
-            CreateInviteForUserError::ServerNeedsLoginForInvite => {
+            CreateInviteForUserError::ServerNotFound {} => write!(f, "Server not found"),
+            CreateInviteForUserError::ServerNeedsLoginForInvite {} => {
                 write!(f, "In order to view this server, you must login!")
             }
-            CreateInviteForUserError::UserIsBlacklisted => {
+            CreateInviteForUserError::UserIsBlacklisted {} => {
                 write!(f, "User is blacklisted from this server")
             }
-            CreateInviteForUserError::ServerHasNoInvite => write!(f, "Server has no invite"),
-            CreateInviteForUserError::ServerHasInvalidInvite => {
+            CreateInviteForUserError::ServerHasNoInvite {} => write!(f, "Server has no invite"),
+            CreateInviteForUserError::ServerHasInvalidInvite {} => {
                 write!(f, "Server has an invalid invite")
             }
         }
     }
 }
 
+/// Represents the result of creating an invite for a user
 #[derive(Serialize, Deserialize, ToSchema, TS, Clone, VariantNames)]
 #[ts(export, export_to = ".generated/CreateInviteForUserResult.ts")]
 pub enum CreateInviteForUserResult {
@@ -330,27 +332,27 @@ pub async fn create_invite_for_user(
 
     let row = match row {
         Some(r) => r,
-        None => return Err(CreateInviteForUserError::ServerNotFound),
+        None => return Err(CreateInviteForUserError::ServerNotFound {}),
     };
 
     if row.login_required_for_invite {
         let Some(user_id) = user_id else {
-            return Err(CreateInviteForUserError::ServerNeedsLoginForInvite);
+            return Err(CreateInviteForUserError::ServerNeedsLoginForInvite {});
         };
 
         if row.blacklisted_users.contains(&user_id.to_string()) {
-            return Err(CreateInviteForUserError::UserIsBlacklisted);
+            return Err(CreateInviteForUserError::UserIsBlacklisted {});
         }
     }
 
     if row.invite == "none" {
-        return Err(CreateInviteForUserError::ServerHasNoInvite);
+        return Err(CreateInviteForUserError::ServerHasNoInvite {});
     }
 
     let invite_splitted = row.invite.split(':').collect::<Vec<_>>();
 
     if invite_splitted.len() < 2 {
-        return Err(CreateInviteForUserError::ServerHasInvalidInvite);
+        return Err(CreateInviteForUserError::ServerHasInvalidInvite {});
     }
 
     match invite_splitted[0] {
@@ -363,18 +365,18 @@ pub async fn create_invite_for_user(
         "per_user" => {
             let channel_id = invite_splitted[1]
                 .parse::<serenity::all::ChannelId>()
-                .map_err(|_| CreateInviteForUserError::ServerHasInvalidInvite)?;
+                .map_err(|_| CreateInviteForUserError::ServerHasInvalidInvite {})?;
             let max_uses = if invite_splitted.len() >= 3 {
                 invite_splitted[2]
                     .parse::<u8>()
-                    .map_err(|_| CreateInviteForUserError::ServerHasInvalidInvite)?
+                    .map_err(|_| CreateInviteForUserError::ServerHasInvalidInvite {})?
             } else {
                 1 // default to 1
             };
             let max_age = if invite_splitted.len() >= 4 {
                 invite_splitted[3]
                     .parse::<u32>()
-                    .map_err(|_| CreateInviteForUserError::ServerHasInvalidInvite)?
+                    .map_err(|_| CreateInviteForUserError::ServerHasInvalidInvite {})?
             } else {
                 300 // default to 5 minutes
             };
@@ -404,6 +406,6 @@ pub async fn create_invite_for_user(
 
             Ok(CreateInviteForUserResult::Invite { url: invite.url() })
         }
-        _ => Err(CreateInviteForUserError::ServerHasInvalidInvite),
+        _ => Err(CreateInviteForUserError::ServerHasInvalidInvite {}),
     }
 }
