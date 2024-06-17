@@ -3,6 +3,7 @@ use std::time::Duration;
 use crate::{Context, Error};
 use log::info;
 use poise::CreateReply;
+use serde::{Deserialize, Serialize};
 use serenity::{
     all::{ButtonStyle, CreateActionRow, CreateButton, CreateEmbed, InputTextStyle},
     builder::{
@@ -13,6 +14,9 @@ use serenity::{
     utils::CreateQuickModal,
 };
 use sqlx::types::chrono;
+use strum_macros::VariantNames;
+use ts_rs::TS;
+use utoipa::ToSchema;
 
 /// Sets up the invite for a server
 ///
@@ -266,9 +270,10 @@ async fn resolve_invite(ctx: &Context<'_>, invite: &str) -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(Serialize, Deserialize, ToSchema, TS, Clone, VariantNames)]
+#[ts(export, export_to = ".generated/CreateInviteForUserError.ts")]
 pub enum CreateInviteForUserError {
-    Generic(String),
+    Generic { message: String },
     ServerNotFound,
     ServerNeedsLoginForInvite,
     UserIsBlacklisted,
@@ -279,7 +284,7 @@ pub enum CreateInviteForUserError {
 impl core::fmt::Display for CreateInviteForUserError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            CreateInviteForUserError::Generic(s) => write!(f, "{}", s),
+            CreateInviteForUserError::Generic { message } => write!(f, "{}", message),
             CreateInviteForUserError::ServerNotFound => write!(f, "Server not found"),
             CreateInviteForUserError::ServerNeedsLoginForInvite => {
                 write!(f, "In order to view this server, you must login!")
@@ -295,28 +300,32 @@ impl core::fmt::Display for CreateInviteForUserError {
     }
 }
 
+#[derive(Serialize, Deserialize, ToSchema, TS, Clone, VariantNames)]
+#[ts(export, export_to = ".generated/CreateInviteForUserResult.ts")]
 pub enum CreateInviteForUserResult {
-    Invite(String),
+    Invite { url: String },
 }
 
 /// Creates an invite for a user in a guild
 ///
 /// TODO: Improve this with more features if needed (such as whitelist-only servers)
 pub async fn create_invite_for_user(
-    ctx: &serenity::all::Context,
+    cache_http: &botox::cache::CacheHttpImpl,
+    pool: &sqlx::PgPool,
     guild_id: serenity::all::GuildId,
     user_id: Option<serenity::all::UserId>,
 ) -> Result<CreateInviteForUserResult, CreateInviteForUserError> {
-    let data = ctx.data::<crate::Data>();
     let row = sqlx::query!(
         "SELECT login_required_for_invite, blacklisted_users, invite, type, state FROM servers WHERE server_id = $1",
         guild_id.to_string()
     )
-    .fetch_optional(&data.pool)
+    .fetch_optional(pool)
     .await
     .map_err(|e| {
         log::error!("Failed to fetch server data: {}", e);
-        CreateInviteForUserError::Generic("Failed to fetch server data".into())
+        CreateInviteForUserError::Generic {
+            message: format!("Failed to fetch server data: {}", e),
+        }
     })?;
 
     let row = match row {
@@ -347,7 +356,9 @@ pub async fn create_invite_for_user(
     match invite_splitted[0] {
         "invite_url" => {
             let invite = invite_splitted[1];
-            Ok(CreateInviteForUserResult::Invite(invite.to_string()))
+            Ok(CreateInviteForUserResult::Invite {
+                url: invite.to_string(),
+            })
         }
         "per_user" => {
             let channel_id = invite_splitted[1]
@@ -370,7 +381,7 @@ pub async fn create_invite_for_user(
 
             let invite = channel_id
                 .create_invite(
-                    ctx.http(),
+                    &cache_http.http,
                     serenity::all::CreateInvite::default()
                         .max_uses(max_uses)
                         .max_age(max_age)
@@ -386,10 +397,12 @@ pub async fn create_invite_for_user(
                 .await
                 .map_err(|e| {
                     log::error!("Failed to create invite: {}", e);
-                    CreateInviteForUserError::Generic(format!("Failed to create invite: {}", e))
+                    CreateInviteForUserError::Generic {
+                        message: format!("Failed to create invite: {}", e),
+                    }
                 })?;
 
-            Ok(CreateInviteForUserResult::Invite(invite.url()))
+            Ok(CreateInviteForUserResult::Invite { url: invite.url() })
         }
         _ => Err(CreateInviteForUserError::ServerHasInvalidInvite),
     }

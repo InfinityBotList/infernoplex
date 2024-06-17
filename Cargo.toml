@@ -10,6 +10,7 @@ strip = true    # Automatically strip symbols from the binary.
 panic = "abort" # Abort on panic. This is what we want for a bot.
 
 [dependencies]
+utoipa = { version = "4.1.0", features = ["axum_extras"] }
 poise = { git = "https://github.com/serenity-rs/poise", branch = "serenity-next" }
 serde = "1.0"
 log = "0.4"
@@ -41,7 +42,7 @@ tower-http = { version = "0.5", features = ["cors"] }
 ring = "0.17"
 data-encoding = "2.3"
 ts-rs = { version = "8", features = ["chrono-impl"] }
-axum = { version = "0.7.5", default-features = true }
+axum = { version = "0.7", default-features = true, features = ["macros"] }
 
 [dependencies.tokio]
 version = "1"

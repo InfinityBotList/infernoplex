@@ -27,9 +27,11 @@ pub static CONNECT_STATE: Lazy<RwLock<ConnectState>> = Lazy::new(|| {
     })
 });
 
-// User data, which is stored and accessible in all command invocations
+/// User data, which is stored and accessible in all command invocations
+#[allow(dead_code)]
 pub struct Data {
     pool: sqlx::PgPool,
+    intents: serenity::all::GatewayIntents,
 }
 
 #[poise::command(prefix_command)]
@@ -215,12 +217,15 @@ async fn main() {
 
     let client_builder = serenity::all::ClientBuilder::new_with_http(http, intents);
 
+    let pool = PgPoolOptions::new()
+        .max_connections(MAX_CONNECTIONS)
+        .connect(&config::CONFIG.database_url)
+        .await
+        .expect("Could not initialize connection");
+
     let data = Data {
-        pool: PgPoolOptions::new()
-            .max_connections(MAX_CONNECTIONS)
-            .connect(&config::CONFIG.database_url)
-            .await
-            .expect("Could not initialize connection"),
+        pool: pool.clone(),
+        intents,
     };
 
     let prefix = crate::config::CONFIG.prefix.get();
@@ -273,6 +278,14 @@ async fn main() {
         .data(Arc::new(data))
         .await
         .expect("Error creating client");
+
+    // Start sorbet server
+    let cache_http_papi = botox::cache::CacheHttpImpl {
+        http: client.http.clone(),
+        cache: client.cache.clone(),
+    };
+
+    tokio::task::spawn(sorbet::server::setup_server(pool, cache_http_papi, intents));
 
     if let Err(why) = client.start().await {
         error!("Client error: {:?}", why);
