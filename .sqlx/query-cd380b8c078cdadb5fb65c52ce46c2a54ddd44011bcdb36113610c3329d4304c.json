@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, created_at, type, target_type, target_id, perm_limits, expiry FROM api_sessions WHERE token = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "target_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "target_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "perm_limits",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 7,
+        "name": "expiry",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "cd380b8c078cdadb5fb65c52ce46c2a54ddd44011bcdb36113610c3329d4304c"
+}

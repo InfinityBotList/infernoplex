@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT login_required_for_invite, blacklisted_users, invite, type, state FROM servers WHERE server_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "login_required_for_invite",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "blacklisted_users",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 2,
+        "name": "invite",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "state",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fc01e696bb05b8026ece89f1231f65bd58df02e073da221f4310bd474d20e787"
+}
