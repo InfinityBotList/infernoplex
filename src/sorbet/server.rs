@@ -59,6 +59,7 @@ pub async fn setup_server(
         paths(query),
         components(schemas(
             InfernoplexQuery,
+            InfernoplexResponse,
             CreateInviteForUserResult,
             CreateInviteForUserError
         ))
