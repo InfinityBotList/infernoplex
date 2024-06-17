@@ -270,6 +270,7 @@ async fn resolve_invite(ctx: &Context<'_>, invite: &str) -> Result<(), Error> {
 pub enum CreateInviteForUserError {
     Generic(String),
     ServerNotFound,
+    ServerNeedsLoginForInvite,
     UserIsBlacklisted,
     ServerHasNoInvite,
     ServerHasInvalidInvite,
@@ -280,6 +281,9 @@ impl core::fmt::Display for CreateInviteForUserError {
         match self {
             CreateInviteForUserError::Generic(s) => write!(f, "{}", s),
             CreateInviteForUserError::ServerNotFound => write!(f, "Server not found"),
+            CreateInviteForUserError::ServerNeedsLoginForInvite => {
+                write!(f, "In order to view this server, you must login!")
+            }
             CreateInviteForUserError::UserIsBlacklisted => {
                 write!(f, "User is blacklisted from this server")
             }
@@ -301,11 +305,11 @@ pub enum CreateInviteForUserResult {
 pub async fn create_invite_for_user(
     ctx: &serenity::all::Context,
     guild_id: serenity::all::GuildId,
-    user_id: serenity::all::UserId,
+    user_id: Option<serenity::all::UserId>,
 ) -> Result<CreateInviteForUserResult, CreateInviteForUserError> {
     let data = ctx.data::<crate::Data>();
     let row = sqlx::query!(
-        "SELECT blacklisted_users, invite, type, state FROM servers WHERE server_id = $1",
+        "SELECT login_required_for_invite, blacklisted_users, invite, type, state FROM servers WHERE server_id = $1",
         guild_id.to_string()
     )
     .fetch_optional(&data.pool)
@@ -320,8 +324,14 @@ pub async fn create_invite_for_user(
         None => return Err(CreateInviteForUserError::ServerNotFound),
     };
 
-    if row.blacklisted_users.contains(&user_id.to_string()) {
-        return Err(CreateInviteForUserError::UserIsBlacklisted);
+    if row.login_required_for_invite {
+        let Some(user_id) = user_id else {
+            return Err(CreateInviteForUserError::ServerNeedsLoginForInvite);
+        };
+
+        if row.blacklisted_users.contains(&user_id.to_string()) {
+            return Err(CreateInviteForUserError::UserIsBlacklisted);
+        }
     }
 
     if row.invite == "none" {
@@ -364,7 +374,14 @@ pub async fn create_invite_for_user(
                     serenity::all::CreateInvite::default()
                         .max_uses(max_uses)
                         .max_age(max_age)
-                        .unique(true),
+                        .unique(true)
+                        .audit_log_reason(
+                            match user_id {
+                                Some(user_id) => format!("Invite created for user {}", user_id),
+                                None => "Invite created for anonymous user".to_string(),
+                            }
+                            .as_str(),
+                        ),
                 )
                 .await
                 .map_err(|e| {

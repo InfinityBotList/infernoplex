@@ -1,3 +1,4 @@
+use crate::shadowclaw::perms::check_for_permission;
 use crate::{Context, Error};
 use poise::{
     serenity_prelude::{
@@ -10,7 +11,7 @@ use poise::{
 use std::time::Duration;
 
 async fn _update_check(ctx: Context<'_>) -> Result<bool, Error> {
-    crate::splashtail::perms::check_for_permission(&ctx, "server.edit").await?;
+    check_for_permission(&ctx, "server.edit").await?;
     Ok(true)
 }
 
@@ -155,7 +156,7 @@ pub async fn update(
             }
         }
         UpdatePane::Invite => {
-            let invite = crate::splashtail::invite::setup_invite_view(&ctx).await?;
+            let invite = crate::shadowclaw::invite::setup_invite_view(&ctx).await?;
 
             // Save to the database
             sqlx::query!(

@@ -58,14 +58,19 @@ pub struct Config {
     pub token: Differs<String>,
     pub prefix: Differs<String>,
     pub servers: Servers,
-    pub frontend_url: String,
+    pub frontend_url: Differs<String>,
     pub proxy_url: String,
     pub cdn_main_scope_path: String,
+    pub server_port: Differs<u16>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
+            server_port: Differs {
+                staging: 61000,
+                prod: 61001,
+            },
             database_url: String::from(""),
             token: Differs {
                 staging: String::from(""),
@@ -77,7 +82,10 @@ impl Default for Config {
             },
             client_secret: String::from(""),
             servers: Servers::default(),
-            frontend_url: String::from("https://infinitybots.gg"),
+            frontend_url: Differs {
+                staging: String::from("https://reedwhisker.infinitybots.gg"),
+                prod: String::from("https://infinitybots.gg"),
+            },
             proxy_url: String::from("http://127.0.0.1:3219"),
             cdn_main_scope_path: String::from("/silverpelt/cdn/ibl"),
         }

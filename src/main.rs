@@ -9,7 +9,8 @@ mod checks;
 mod cmds;
 mod config;
 mod help;
-mod splashtail;
+mod shadowclaw;
+mod sorbet;
 mod stats;
 mod tasks;
 

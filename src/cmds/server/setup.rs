@@ -41,7 +41,7 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
                         .title("Server Already Setup")
                         .url(format!(
                             "{}/servers/{}",
-                            crate::config::CONFIG.frontend_url,
+                            crate::config::CONFIG.frontend_url.get(),
                             server_id
                         ))
                         .description(
@@ -51,7 +51,7 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
                 .components(vec![CreateActionRow::Buttons(vec![
                     CreateButton::new_link(format!(
                         "{}/servers/{}",
-                        crate::config::CONFIG.frontend_url,
+                        crate::config::CONFIG.frontend_url.get(),
                         server_id
                     ))
                     .label("Redirect"),
@@ -191,10 +191,10 @@ Notes:
     };
 
     // Next try to resolve an invite for this guild
-    let invite = crate::splashtail::invite::setup_invite_view(&ctx).await?;
+    let invite = crate::shadowclaw::invite::setup_invite_view(&ctx).await?;
 
     // Get guild stats
-    let guild_stats = crate::splashtail::stats::GuildStats::from_ctx(&ctx)?;
+    let guild_stats = crate::shadowclaw::stats::GuildStats::from_ctx(&ctx)?;
 
     // Create a new team with a random vanity
     let mut tx = ctx.data().pool.begin().await?;
@@ -224,7 +224,7 @@ Notes:
     let img_bytes = guild_stats.download_image().await?;
 
     // Convert img_bytes to webp for both teams and servers
-    crate::splashtail::webp::image_to_webp(
+    crate::shadowclaw::webp::image_to_webp(
         &guild_stats.icon,
         format!(
             "{}/avatars/teams/{}.webp",
@@ -236,7 +236,7 @@ Notes:
     .map_err(|e| format!("Error converting image to webp [teams]: {}", e))?;
 
     // Convert img_bytes to webp for both teams and servers
-    crate::splashtail::webp::image_to_webp(
+    crate::shadowclaw::webp::image_to_webp(
         &guild_stats.icon,
         format!(
             "{}/avatars/servers/{}.webp",

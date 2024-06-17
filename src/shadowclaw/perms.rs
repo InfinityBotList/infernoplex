@@ -55,14 +55,14 @@ pub async fn check_for_permission(
         return Err("This operation can only be performed in a server".into());
     };
 
-    match crate::splashtail::perms::get_member_team_permissions(
+    match crate::shadowclaw::perms::get_member_team_permissions(
         &ctx.data().pool,
         guild_id,
         ctx.author().id,
     )
     .await?
     {
-        crate::splashtail::perms::GetMemberTeamPermissionsResult::Found(permissions) => {
+        crate::shadowclaw::perms::GetMemberTeamPermissionsResult::Found(permissions) => {
             if !kittycat::perms::has_perm(&permissions, &perm.into()) {
                 return Err(format!(
                     "You must have the ``{}`` permission to perform this operation!",
@@ -71,10 +71,10 @@ pub async fn check_for_permission(
                 .into());
             }
         }
-        crate::splashtail::perms::GetMemberTeamPermissionsResult::ServerNotFound => {
+        crate::shadowclaw::perms::GetMemberTeamPermissionsResult::ServerNotFound => {
             return Err("This server is not on Infinity List! Run `/setup` to enlist it!".into());
         }
-        crate::splashtail::perms::GetMemberTeamPermissionsResult::MemberNotInTeam => {
+        crate::shadowclaw::perms::GetMemberTeamPermissionsResult::MemberNotInTeam => {
             return Err("You are not in this server's team!".into());
         }
     }

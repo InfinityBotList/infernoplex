@@ -1,3 +1,4 @@
+use crate::shadowclaw::perms::check_for_permission;
 use crate::{Context, Error};
 use poise::{
     serenity_prelude::{ButtonStyle, CreateActionRow, CreateButton, CreateEmbed},
@@ -6,7 +7,7 @@ use poise::{
 use std::time::Duration;
 
 async fn _delete_check(ctx: Context<'_>) -> Result<bool, Error> {
-    crate::splashtail::perms::check_for_permission(&ctx, "server.delete").await?;
+    check_for_permission(&ctx, "server.delete").await?;
     Ok(true)
 }
 
