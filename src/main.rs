@@ -4,6 +4,8 @@ use serenity::all::FullEvent;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use poise::serenity_prelude::{Color, CreateEmbed, CreateMessage};
+use poise::CreateReply;
 
 mod checks;
 mod cmds;
@@ -32,6 +34,55 @@ pub static CONNECT_STATE: Lazy<RwLock<ConnectState>> = Lazy::new(|| {
 pub struct Data {
     pool: sqlx::PgPool,
     intents: serenity::all::GatewayIntents,
+}
+
+#[poise::command(
+    rename = "leaderboard",
+    prefix_command,
+    slash_command
+)]
+pub async fn leaderboard(
+    ctx: Context<'_>,
+    #[description = "Limit the amount of results."] limit: Option<i64>,
+) -> Result<(), Error> {
+    let data = ctx.data();
+    let number = limit.unwrap_or(5);
+
+    let stats = sqlx::query!(
+        "SELECT user_id, approved_count, denied_count FROM (SELECT rpc.user_id, SUM(CASE WHEN rpc.method = 'Approve' THEN 1 ELSE 0 END) AS approved_count, SUM(CASE WHEN rpc.method = 'Deny' THEN 1 ELSE 0 END) AS denied_count, SUM(CASE WHEN rpc.method IN ('Approve', 'Deny') THEN 1 ELSE 0 END) AS total_count FROM rpc_logs rpc LEFT JOIN staff_members sm ON rpc.user_id = sm.user_id WHERE rpc.method IN ('Approve', 'Deny') AND sm.user_id IS NOT NULL GROUP BY rpc.user_id) AS subquery WHERE total_count > 0 ORDER BY total_count DESC LIMIT $1;", 
+        number
+    )
+    .fetch_all(&data.pool)
+    .await?;
+
+    let mut desc =
+        String::from("Oh, hello there! Let's see who our most active users are :eyes:\n\n");
+    let mut embed = CreateEmbed::default()
+        .title("Leaderboard")
+        .color(Color::from_rgb(0, 255, 0))
+        .description(desc.clone());
+
+    for (index, stat) in stats.iter().enumerate() {
+        let emoji = match index {
+            0 => "🥇",
+            1 => "🥈",
+            2 => "🥉",
+            _ => "",
+        };
+
+        desc.push_str(&format!(
+            "{} <@{}>\n",
+            emoji,
+            stat.user_id,        
+        ));
+    }
+
+    embed = embed.description(desc);
+
+    let msg = CreateReply::default().embed(embed);
+
+    ctx.send(msg).await?;
+    Ok(())
 }
 
 #[poise::command(prefix_command)]
