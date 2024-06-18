@@ -36,6 +36,12 @@ pub struct Data {
     intents: serenity::all::GatewayIntents,
 }
 
+#[poise::command(prefix_command)]
+async fn register(ctx: Context<'_>) -> Result<(), Error> {
+    poise::builtins::register_application_commands_buttons(ctx).await?;
+    Ok(())
+}
+
 #[poise::command(
     rename = "leaderboard",
     prefix_command,
@@ -82,12 +88,6 @@ pub async fn leaderboard(
     let msg = CreateReply::default().embed(embed);
 
     ctx.send(msg).await?;
-    Ok(())
-}
-
-#[poise::command(prefix_command)]
-async fn register(ctx: Context<'_>) -> Result<(), Error> {
-    poise::builtins::register_application_commands_buttons(ctx).await?;
     Ok(())
 }
 
@@ -293,10 +293,12 @@ async fn main() {
             register(),
             help::help(),
             stats::stats(),
+            leaderboard(),
             // Custom
             cmds::server::setup::setup(),
             cmds::server::update::update(),
             cmds::server::delete::delete(),
+            
         ],
         // This code is run before every command
         pre_command: |ctx| {
