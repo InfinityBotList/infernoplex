@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc};
 
 use crate::shadowclaw::invite::{CreateInviteForUserError, CreateInviteForUserResult};
 use axum::extract::DefaultBodyLimit;
@@ -20,26 +20,6 @@ use strum_macros::Display;
 use tower_http::cors::{Any, CorsLayer};
 use ts_rs::TS;
 use utoipa::ToSchema;
-
-struct Error {
-    status: StatusCode,
-    message: String,
-}
-
-impl Error {
-    fn new(e: impl Display) -> Self {
-        Self {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            message: e.to_string(),
-        }
-    }
-}
-
-impl IntoResponse for Error {
-    fn into_response(self) -> Response {
-        (self.status, self.message).into_response()
-    }
-}
 
 #[allow(dead_code)]
 pub struct AppState {
@@ -134,24 +114,48 @@ pub enum InfernoplexResponse {
     /// The result of calling CreateInvite
     CreateInvite {
         /// Successfully created an invite
-        ok: Option<CreateInviteForUserResult>,
-        /// Failed to create an invite
-        err: Option<CreateInviteForUserError>,
+        result: CreateInviteForUserResult,
     },
 }
 
 impl IntoResponse for InfernoplexResponse {
     fn into_response(self) -> Response {
-        let status = match &self {
-            InfernoplexResponse::CreateInvite { ok, .. } => {
-                if ok.is_some() {
-                    StatusCode::OK
-                } else {
-                    StatusCode::BAD_REQUEST
-                }
-            }
-        };
-        (status, self).into_response()
+        (StatusCode::OK, self).into_response()
+    }
+}
+
+#[derive(Serialize, Deserialize, ToSchema, TS, Display, Clone, VariantNames)]
+#[ts(export, export_to = ".generated/InfernoplexError.ts")]
+pub enum InfernoplexError {
+    /// The result of calling CreateInvite
+    CreateInvite {
+        /// Successfully created an invite
+        err: CreateInviteForUserError,
+    },
+    /// A generic error message
+    GenericError { message: String },
+}
+
+#[derive(Clone)]
+pub struct InfernoplexErrorResponse {
+    pub status: StatusCode,
+    pub headers: HeaderMap,
+    pub error: InfernoplexError,
+}
+
+impl InfernoplexErrorResponse {
+    pub fn new(status: StatusCode, headers: HeaderMap, error: InfernoplexError) -> Self {
+        Self {
+            status,
+            headers,
+            error,
+        }
+    }
+}
+
+impl IntoResponse for InfernoplexErrorResponse {
+    fn into_response(self) -> Response {
+        (self.status, self.headers, Json(self.error)).into_response()
     }
 }
 
@@ -162,40 +166,76 @@ impl IntoResponse for InfernoplexResponse {
     path = "/",
     responses(
         (status = 200, description = "The response of the query", body = InfernoplexResponse),
-        (status = BAD_REQUEST, description = "An error occured performing the requested action", body = InfernoplexResponse),
-        (status = INTERNAL_SERVER_ERROR, description = "An error occured performing the requested action", body = String),
+        (status = BAD_REQUEST, description = "An error occured performing the requested action", body = InfernoplexError),
     ),
 )]
 #[axum::debug_handler]
 async fn query(
     State(state): State<Arc<AppState>>,
     Json(req): Json<InfernoplexQuery>,
-) -> Result<InfernoplexResponse, Error> {
+) -> Result<InfernoplexResponse, InfernoplexErrorResponse> {
     match req {
         InfernoplexQuery::CreateInvite { guild_id, session } => {
-            let guild_id: serenity::all::GuildId = guild_id.parse().map_err(Error::new)?;
+            let guild_id = guild_id.parse::<serenity::all::GuildId>().map_err(|e| {
+                InfernoplexErrorResponse::new(
+                    StatusCode::BAD_REQUEST,
+                    HeaderMap::new(),
+                    InfernoplexError::GenericError {
+                        message: format!("Invalid guild ID: {}", e),
+                    },
+                )
+            })?;
 
             let user_id = if let Some(session) = session {
                 let auth_session = super::auth::Session::from_token(&state.pool, &session)
                     .await
-                    .map_err(Error::new)?;
+                    .map_err(|e| {
+                        InfernoplexErrorResponse::new(
+                            StatusCode::BAD_REQUEST,
+                            HeaderMap::new(),
+                            InfernoplexError::GenericError {
+                                message: format!("Invalid session: {}", e),
+                            },
+                        )
+                    })?;
 
                 if let Some(auth_session) = auth_session {
                     // Check that target_type == 'user'
                     if auth_session.target_type != "user" {
-                        return Err(Error::new(
-                            "CreateInvite can only be called on a user session",
+                        return Err(InfernoplexErrorResponse::new(
+                            StatusCode::FORBIDDEN,
+                            HeaderMap::new(),
+                            InfernoplexError::GenericError {
+                                message: "CreateInvite can only be called on a user session"
+                                    .to_string(),
+                            },
                         ));
                     }
 
-                    let user_id: serenity::all::UserId =
-                        auth_session.target_id.parse().map_err(Error::new)?;
+                    let user_id = auth_session
+                        .target_id
+                        .parse::<serenity::all::UserId>()
+                        .map_err(|e| {
+                            InfernoplexErrorResponse::new(
+                                StatusCode::FORBIDDEN,
+                                HeaderMap::new(),
+                                InfernoplexError::GenericError {
+                                    message: format!("Invalid user ID: {}", e),
+                                },
+                            )
+                        })?;
 
                     Some(user_id)
                 } else {
                     let mut headers = HeaderMap::new();
                     headers.insert("X-Session-Invalid", "1".parse().unwrap());
-                    return Err(Error::new("Session does not exist?"));
+                    return Err(InfernoplexErrorResponse::new(
+                        StatusCode::FORBIDDEN,
+                        headers,
+                        InfernoplexError::GenericError {
+                            message: "Invalid session token".to_string(),
+                        },
+                    ));
                 }
             } else {
                 None
@@ -210,14 +250,12 @@ async fn query(
             .await;
 
             match created_invite {
-                Ok(invite) => Ok(InfernoplexResponse::CreateInvite {
-                    ok: Some(invite),
-                    err: None,
-                }),
-                Err(e) => Ok(InfernoplexResponse::CreateInvite {
-                    ok: None,
-                    err: Some(e),
-                }),
+                Ok(invite) => Ok(InfernoplexResponse::CreateInvite { result: invite }),
+                Err(e) => Err(InfernoplexErrorResponse::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    HeaderMap::new(),
+                    InfernoplexError::CreateInvite { err: e },
+                )),
             }
         }
     }
