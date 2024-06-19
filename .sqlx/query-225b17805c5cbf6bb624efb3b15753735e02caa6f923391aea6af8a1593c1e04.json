@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT author,\n        (SUM(CASE WHEN upvote THEN 1 ELSE 0 END) - SUM(CASE WHEN NOT upvote THEN 1 ELSE 0 END)) AS score\n        FROM entity_votes \n        WHERE target_id = $1\n        AND target_type = 'server'\n        AND void = false\n        GROUP BY author\n        ORDER BY score DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "author",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "score",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "225b17805c5cbf6bb624efb3b15753735e02caa6f923391aea6af8a1593c1e04"
+}
