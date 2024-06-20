@@ -120,7 +120,7 @@ pub enum InfernoplexResponse {
 
 impl IntoResponse for InfernoplexResponse {
     fn into_response(self) -> Response {
-        (StatusCode::OK, self).into_response()
+        (StatusCode::OK, Json(self)).into_response()
     }
 }
 
@@ -248,6 +248,8 @@ async fn query(
                 user_id,
             )
             .await;
+
+            log::info!("Created invite: {:?}", created_invite);
 
             match created_invite {
                 Ok(invite) => Ok(InfernoplexResponse::CreateInvite { result: invite }),

@@ -68,6 +68,13 @@ pub async fn update(
                     ctx,
                     CreateReply::default()
                         .to_prefix_edit(serenity::all::EditMessage::default())
+                        .embed(
+                            CreateEmbed::new()
+                                .title("Update Server Information")
+                                .description(
+                                "Please follow the instructions given in the modal to continue! If you don't see a modal, please rerun the command",
+                            ),
+                        )
                         .components(vec![]),
                 )
                 .await?;
@@ -115,8 +122,8 @@ pub async fn update(
                     sqlx::query!(
                         "UPDATE servers SET short = $2, long = $3 WHERE server_id = $1",
                         guild_id.to_string(),
+                        &inputs[0].to_string(),
                         &inputs[1].to_string(),
-                        &inputs[2].to_string(),
                     )
                     .execute(&ctx.data().pool)
                     .await?;
@@ -157,6 +164,8 @@ pub async fn update(
         }
         UpdatePane::Invite => {
             let invite = crate::shadowclaw::invite::setup_invite_view(&ctx).await?;
+
+            log::info!("Invite: {}", invite);
 
             // Save to the database
             sqlx::query!(

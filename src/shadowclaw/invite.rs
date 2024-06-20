@@ -89,7 +89,7 @@ Okay! Now, let's setup the invite for this server! To get started, choose which 
         )
         .await?; // remove buttons after button press
 
-        let res = match id.as_str() {
+        Ok(match id.as_str() {
             "cancel" => return Err("Setup cancelled".into()),
             "invite_url" => {
                 // Ask for invite url now
@@ -181,6 +181,20 @@ Okay! Now, let's setup the invite for this server! To get started, choose which 
                     );
 
                 if let Some(resp) = m.quick_modal(ctx.serenity_context(), qm).await? {
+                    // Send a please wait response
+                    resp.interaction
+                        .create_response(
+                            ctx.http(),
+                            CreateInteractionResponse::Message(
+                                CreateInteractionResponseMessage::default().embed(
+                                    CreateEmbed::new()
+                                        .title("Please wait!")
+                                        .description("Please wait..."),
+                                ),
+                            ),
+                        )
+                        .await?;
+
                     let inputs = resp.inputs;
 
                     let channel_id: serenity::all::ChannelId = inputs[0].parse()?;
@@ -210,21 +224,7 @@ Okay! Now, let's setup the invite for this server! To get started, choose which 
             }
             "none" => "none".to_string(),
             _ => return Err("Invalid choice".into()),
-        };
-
-        m.create_response(
-            ctx.http(),
-            CreateInteractionResponse::Message(
-                CreateInteractionResponseMessage::default().embed(
-                    CreateEmbed::new()
-                        .title("Invite Use")
-                        .description(format!("**Chosen invite type:** {}", id)),
-                ),
-            ),
-        )
-        .await?;
-
-        Ok(res.to_string())
+        })
     } else {
         Err("Timed out waiting for choice".into())
     }
@@ -271,7 +271,7 @@ async fn resolve_invite(ctx: &Context<'_>, invite: &str) -> Result<(), Error> {
 }
 
 /// Represents the error that can occur when creating an invite for a user
-#[derive(Serialize, Deserialize, ToSchema, TS, Clone, VariantNames)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS, Clone, VariantNames)]
 #[ts(export, export_to = ".generated/CreateInviteForUserError.ts")]
 pub enum CreateInviteForUserError {
     Generic { message: String },
@@ -302,7 +302,7 @@ impl core::fmt::Display for CreateInviteForUserError {
 }
 
 /// Represents the result of creating an invite for a user
-#[derive(Serialize, Deserialize, ToSchema, TS, Clone, VariantNames)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS, Clone, VariantNames)]
 #[ts(export, export_to = ".generated/CreateInviteForUserResult.ts")]
 pub enum CreateInviteForUserResult {
     Invite { url: String },
@@ -357,10 +357,8 @@ pub async fn create_invite_for_user(
 
     match invite_splitted[0] {
         "invite_url" => {
-            let invite = invite_splitted[1];
-            Ok(CreateInviteForUserResult::Invite {
-                url: invite.to_string(),
-            })
+            let invite = invite_splitted[1..].join(":");
+            Ok(CreateInviteForUserResult::Invite { url: invite })
         }
         "per_user" => {
             let channel_id = invite_splitted[1]
