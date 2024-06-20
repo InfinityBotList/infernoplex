@@ -40,6 +40,7 @@ pub async fn setup_server(
         components(schemas(
             InfernoplexQuery,
             InfernoplexResponse,
+            InfernoplexError,
             CreateInviteForUserResult,
             CreateInviteForUserError
         ))
@@ -131,6 +132,8 @@ pub enum InfernoplexError {
     CreateInvite {
         /// Successfully created an invite
         err: CreateInviteForUserError,
+        /// Error message
+        message: String,
     },
     /// A generic error message
     GenericError { message: String },
@@ -246,6 +249,7 @@ async fn query(
                 &state.pool,
                 guild_id,
                 user_id,
+                false,
             )
             .await;
 
@@ -256,7 +260,10 @@ async fn query(
                 Err(e) => Err(InfernoplexErrorResponse::new(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     HeaderMap::new(),
-                    InfernoplexError::CreateInvite { err: e },
+                    InfernoplexError::CreateInvite {
+                        err: e.clone(),
+                        message: e.to_string(),
+                    },
                 )),
             }
         }

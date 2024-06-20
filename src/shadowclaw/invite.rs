@@ -280,6 +280,8 @@ pub enum CreateInviteForUserError {
     UserIsBlacklisted {},
     ServerHasNoInvite {},
     ServerHasInvalidInvite {},
+    ServerTypeNotApprovedOrCertified {},
+    ServerStateNotPublic {},
 }
 
 impl core::fmt::Display for CreateInviteForUserError {
@@ -296,6 +298,12 @@ impl core::fmt::Display for CreateInviteForUserError {
             CreateInviteForUserError::ServerHasNoInvite {} => write!(f, "Server has no invite"),
             CreateInviteForUserError::ServerHasInvalidInvite {} => {
                 write!(f, "Server has an invalid invite")
+            }
+            CreateInviteForUserError::ServerTypeNotApprovedOrCertified {} => {
+                write!(f, "Server is not approved or certified")
+            }
+            CreateInviteForUserError::ServerStateNotPublic {} => {
+                write!(f, "Server is not public")
             }
         }
     }
@@ -316,6 +324,7 @@ pub async fn create_invite_for_user(
     pool: &sqlx::PgPool,
     guild_id: serenity::all::GuildId,
     user_id: Option<serenity::all::UserId>,
+    skip_checks: bool,
 ) -> Result<CreateInviteForUserResult, CreateInviteForUserError> {
     let row = sqlx::query!(
         "SELECT login_required_for_invite, blacklisted_users, invite, type, state FROM servers WHERE server_id = $1",
@@ -335,13 +344,23 @@ pub async fn create_invite_for_user(
         None => return Err(CreateInviteForUserError::ServerNotFound {}),
     };
 
-    if row.login_required_for_invite {
-        let Some(user_id) = user_id else {
-            return Err(CreateInviteForUserError::ServerNeedsLoginForInvite {});
-        };
+    if !skip_checks {
+        if row.login_required_for_invite {
+            let Some(user_id) = user_id else {
+                return Err(CreateInviteForUserError::ServerNeedsLoginForInvite {});
+            };
 
-        if row.blacklisted_users.contains(&user_id.to_string()) {
-            return Err(CreateInviteForUserError::UserIsBlacklisted {});
+            if row.blacklisted_users.contains(&user_id.to_string()) {
+                return Err(CreateInviteForUserError::UserIsBlacklisted {});
+            }
+        }
+
+        if row.r#type != "approved" && row.r#type != "certified" {
+            return Err(CreateInviteForUserError::ServerTypeNotApprovedOrCertified {});
+        }
+
+        if row.state != "public" {
+            return Err(CreateInviteForUserError::ServerStateNotPublic {});
         }
     }
 
