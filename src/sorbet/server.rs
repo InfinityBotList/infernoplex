@@ -105,7 +105,14 @@ pub enum InfernoplexQuery {
     /// This returns a ``Result<CreateInviteForUserResult, CreateInviteForUserError>``
     CreateInvite {
         session: Option<String>,
-        guild_id: String,
+        #[ts(type = "string")]
+        guild_id: serenity::all::GuildId,
+    },
+    /// Resolves an invite
+    ResolveInvite {
+        invite_code: String,
+        #[ts(type = "string")]
+        guild_id: serenity::all::GuildId,
     },
 }
 
@@ -117,6 +124,7 @@ pub enum InfernoplexResponse {
         /// Successfully created an invite
         result: CreateInviteForUserResult,
     },
+    ResolveInvite {},
 }
 
 impl IntoResponse for InfernoplexResponse {
@@ -135,8 +143,11 @@ pub enum InfernoplexError {
         /// Error message
         message: String,
     },
-    /// A generic error message
-    GenericError { message: String },
+    /// The result of calling ResolveInvite
+    ResolveInvite {
+        /// The error that occured
+        message: String,
+    },
 }
 
 #[derive(Clone)]
@@ -179,16 +190,6 @@ async fn query(
 ) -> Result<InfernoplexResponse, InfernoplexErrorResponse> {
     match req {
         InfernoplexQuery::CreateInvite { guild_id, session } => {
-            let guild_id = guild_id.parse::<serenity::all::GuildId>().map_err(|e| {
-                InfernoplexErrorResponse::new(
-                    StatusCode::BAD_REQUEST,
-                    HeaderMap::new(),
-                    InfernoplexError::GenericError {
-                        message: format!("Invalid guild ID: {}", e),
-                    },
-                )
-            })?;
-
             let user_id = if let Some(session) = session {
                 let auth_session = super::auth::Session::from_token(&state.pool, &session)
                     .await
@@ -196,7 +197,10 @@ async fn query(
                         InfernoplexErrorResponse::new(
                             StatusCode::BAD_REQUEST,
                             HeaderMap::new(),
-                            InfernoplexError::GenericError {
+                            InfernoplexError::CreateInvite {
+                                err: CreateInviteForUserError::Generic {
+                                    message: format!("Invalid session: {}", e),
+                                },
                                 message: format!("Invalid session: {}", e),
                             },
                         )
@@ -208,7 +212,11 @@ async fn query(
                         return Err(InfernoplexErrorResponse::new(
                             StatusCode::FORBIDDEN,
                             HeaderMap::new(),
-                            InfernoplexError::GenericError {
+                            InfernoplexError::CreateInvite {
+                                err: CreateInviteForUserError::Generic {
+                                    message: "CreateInvite can only be called on a user session"
+                                        .to_string(),
+                                },
                                 message: "CreateInvite can only be called on a user session"
                                     .to_string(),
                             },
@@ -222,7 +230,10 @@ async fn query(
                             InfernoplexErrorResponse::new(
                                 StatusCode::FORBIDDEN,
                                 HeaderMap::new(),
-                                InfernoplexError::GenericError {
+                                InfernoplexError::CreateInvite {
+                                    err: CreateInviteForUserError::Generic {
+                                        message: format!("Invalid user ID: {}", e),
+                                    },
                                     message: format!("Invalid user ID: {}", e),
                                 },
                             )
@@ -235,7 +246,10 @@ async fn query(
                     return Err(InfernoplexErrorResponse::new(
                         StatusCode::FORBIDDEN,
                         headers,
-                        InfernoplexError::GenericError {
+                        InfernoplexError::CreateInvite {
+                            err: CreateInviteForUserError::Generic {
+                                message: "Invalid session token".to_string(),
+                            },
                             message: "Invalid session token".to_string(),
                         },
                     ));
@@ -262,6 +276,30 @@ async fn query(
                     HeaderMap::new(),
                     InfernoplexError::CreateInvite {
                         err: e.clone(),
+                        message: e.to_string(),
+                    },
+                )),
+            }
+        }
+        InfernoplexQuery::ResolveInvite {
+            invite_code,
+            guild_id,
+        } => {
+            let resolved_invite = crate::shadowclaw::invite::resolve_invite(
+                &state.cache_http,
+                guild_id,
+                &invite_code,
+            )
+            .await;
+
+            log::info!("Resolved invite: {:?}", resolved_invite);
+
+            match resolved_invite {
+                Ok(_) => Ok(InfernoplexResponse::ResolveInvite {}),
+                Err(e) => Err(InfernoplexErrorResponse::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    HeaderMap::new(),
+                    InfernoplexError::ResolveInvite {
                         message: e.to_string(),
                     },
                 )),

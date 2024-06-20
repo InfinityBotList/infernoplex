@@ -121,7 +121,8 @@ Okay! Now, let's setup the invite for this server! To get started, choose which 
                         )
                         .await?;
 
-                    if let Err(e) = resolve_invite(ctx, invite_url).await {
+                    let cache_http = botox::cache::CacheHttpImpl::from_ctx(ctx.serenity_context());
+                    if let Err(e) = resolve_invite(&cache_http, guild_id, invite_url).await {
                         resp.interaction
                             .edit_response(
                                 ctx.http(),
@@ -230,7 +231,11 @@ Okay! Now, let's setup the invite for this server! To get started, choose which 
     }
 }
 
-async fn resolve_invite(ctx: &Context<'_>, invite: &str) -> Result<(), Error> {
+pub async fn resolve_invite(
+    cache_http: &botox::cache::CacheHttpImpl,
+    guild_id: serenity::all::GuildId,
+    invite: &str,
+) -> Result<(), Error> {
     // Follow all redirects until reaching end
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
@@ -250,11 +255,19 @@ async fn resolve_invite(ctx: &Context<'_>, invite: &str) -> Result<(), Error> {
         .last()
         .ok_or("Invalid invite URL: No code could be parsed")?;
 
-    let invite = ctx
-        .http()
+    let invite = cache_http
+        .http
         .get_invite(code, false, true, None)
         .await
         .map_err(|e| format!("Failed to fetch invite: {}", e))?;
+
+    let Some(invite_guild) = invite.guild else {
+        return Err("Could not fetch information about this guild".into());
+    };
+
+    if invite_guild.id != guild_id {
+        return Err("This invite does not correspond to this server".into());
+    }
 
     if let Some(e) = invite.expires_at {
         // Check length to ensure that expiry is at least 30 days
@@ -303,7 +316,7 @@ impl core::fmt::Display for CreateInviteForUserError {
                 write!(f, "Server is not approved or certified")
             }
             CreateInviteForUserError::ServerStateNotPublic {} => {
-                write!(f, "Server is not public")
+                write!(f, "Server is not public/unlisted and hence invites to it cannot be created unless explicitly whitelisted")
             }
         }
     }
@@ -359,7 +372,7 @@ pub async fn create_invite_for_user(
             return Err(CreateInviteForUserError::ServerTypeNotApprovedOrCertified {});
         }
 
-        if row.state != "public" {
+        if row.state != "public" && row.state != "unlisted" {
             return Err(CreateInviteForUserError::ServerStateNotPublic {});
         }
     }
@@ -383,6 +396,7 @@ pub async fn create_invite_for_user(
             let channel_id = invite_splitted[1]
                 .parse::<serenity::all::ChannelId>()
                 .map_err(|_| CreateInviteForUserError::ServerHasInvalidInvite {})?;
+
             let max_uses = if invite_splitted.len() >= 3 {
                 invite_splitted[2]
                     .parse::<u8>()
