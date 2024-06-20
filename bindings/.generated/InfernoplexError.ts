@@ -9,4 +9,8 @@ err: CreateInviteForUserError,
 /**
  * Error message
  */
-message: string, } } | { "GenericError": { message: string, } };
+message: string, } } | { "ResolveInvite": { 
+/**
+ * The error that occured
+ */
+message: string, } };

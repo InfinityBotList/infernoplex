@@ -5,4 +5,4 @@ export type InfernoplexResponse = { "CreateInvite": {
 /**
  * Successfully created an invite
  */
-result: CreateInviteForUserResult, } };
+result: CreateInviteForUserResult, } } | { "ResolveInvite": Record<string, never> };
