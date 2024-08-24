@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO users (user_id, extra_links, developer, certified) VALUES ($1, $2, false, false)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "45355fc72ce91ed567ff3cf47bb1a221cf805938845de11656228f9f9f0a0cdd"
+}
