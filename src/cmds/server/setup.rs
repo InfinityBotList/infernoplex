@@ -257,9 +257,8 @@ Notes:
 
     if res.count.unwrap_or(0) == 0 {
         sqlx::query!(
-            "INSERT INTO users (user_id, api_token, extra_links, developer, certified) VALUES ($1, $2, $3, false, false)",
+            "INSERT INTO users (user_id, extra_links, developer, certified) VALUES ($1, $2, false, false)",
             guild_stats.owner.to_string(),
-            botox::crypto::gen_random(138),
             sqlx::types::JsonValue::Array(vec![]),
         )
         .execute(&mut *tx)
@@ -296,9 +295,8 @@ Notes:
 
             if res.count.unwrap_or(0) == 0 {
                 sqlx::query!(
-                    "INSERT INTO users (user_id, api_token, extra_links, developer, certified) VALUES ($1, $2, $3, false, false)",
+                    "INSERT INTO users (user_id, extra_links, developer, certified) VALUES ($1, $2, false, false)",
                     member.user.id.to_string(),
-                    botox::crypto::gen_random(138),
                     sqlx::types::JsonValue::Array(vec![]),
                 )
                 .execute(&mut *tx)
@@ -353,7 +351,6 @@ Notes:
             server_id, 
             name, 
             team_owner, 
-            api_token, 
             total_members,
             online_members,
             short,
@@ -373,13 +370,11 @@ Notes:
             $8,
             $9,
             $10,
-            $11,
-            $12
+            $11
         )",
         server_id,
         guild_stats.name.to_string(),
         team_id,
-        botox::crypto::gen_random(138),
         i32::try_from(guild_stats.total_members)?,
         i32::try_from(guild_stats.online_members)?,
         &inputs[1].to_string(),
