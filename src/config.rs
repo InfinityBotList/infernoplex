@@ -28,7 +28,14 @@ pub static CONFIG: Lazy<Config> = Lazy::new(|| Config::load().expect("Failed to 
 /// environments, plus an optional per-developer override for local dev use.
 #[derive(Serialize, Deserialize, Default)]
 pub struct Differs<T: Default + Clone> {
+    /// Only actually read when current-env is "staging" (or "dev" with no
+    /// override, see `dev` below) — defaults to T::default() when absent so
+    /// a prod-only or staging-only config.yaml doesn't have to carry a value
+    /// for the environment it isn't running as.
+    #[serde(default)]
     staging: T,
+    /// Only actually read when current-env is "prod". See `staging` above.
+    #[serde(default)]
     prod: T,
 
     /// Only consulted when running with current-env set to "dev", and even
@@ -112,7 +119,7 @@ impl Default for Config {
                 prod: String::from("https://infinitybots.gg"),
                 dev: None,
             },
-            proxy_url: String::from("http://127.0.0.1:3219"),
+            proxy_url: String::from("https://gateway.nodebyte.host/proxy/discord"),
             cdn_main_scope_path: String::from("/silverpelt/cdn/ibl"),
         }
     }

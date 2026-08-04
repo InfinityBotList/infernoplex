@@ -39,8 +39,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   currently can't reach — REST calls to a guild the bot has left simply
   fail and that row is left untouched until it's reachable again).
 
+### Fixed
+
+- `Differs<T>`'s `staging`/`prod` fields required both to be present in
+  `config.yaml` even though only one is ever read for a given
+  `current-env` — a staging-only or prod-only config failed to parse at
+  all (`missing field`) instead of just leaving the unused environment's
+  value at its default.
+- Sorbet's `IsInGuild` `invite_url` was a generic "add this app to any
+  server you manage" OAuth link, unrelated to the `guild_id` that was
+  actually being checked — it now includes `&guild_id={guild_id}
+  &disable_guild_select=true` so the invite flow is locked to the
+  specific server being added instead of leaving it to the owner to pick
+  correctly out of every server they manage.
+
 ### Changed
 
+- `proxy_url` now defaults to `https://gateway.nodebyte.host/proxy/discord`
+  (the shared parent-company gateway), replacing the old local
+  `http://127.0.0.1:3219` twilight-http-proxy convention. Since that gateway
+  authenticates every request with its own shared bot credential by
+  default, Infernoplex's REST client now sends its own token via an
+  `X-Upstream-Authorization` header instead, which the gateway forwards as
+  the real `Authorization` header sent to Discord — so Infernoplex keeps
+  its own bot identity rather than authenticating as whichever bot the
+  gateway holds.
 - All user-facing commands (`/setup`, `/update`, `/delete`, `/leaderboard`,
   `/stats`, `/help`) are now slash-command only, prefix-command support
   was dropped for these. `!register` (or whatever prefix is configured)

@@ -134,8 +134,30 @@ async fn main() {
 
     info!("Proxy URL: {}", config::CONFIG.proxy_url);
 
+    // gateway.nodebyte.host (ByteProxy) strips whatever Authorization header
+    // the caller sends and replaces it with its own shared bot credential,
+    // to stop callers relaying arbitrary upstream auth through it. Since
+    // Infernoplex needs to authenticate as its own bot application rather
+    // than whichever bot ByteProxy is configured with, the token is instead
+    // passed via X-Upstream-Authorization, which ByteProxy's `discord`
+    // service is opted in (`allowCallerOverride`) to honor and forward as
+    // the real Authorization header sent to Discord.
+    let mut proxy_headers = reqwest::header::HeaderMap::new();
+    proxy_headers.insert(
+        "x-upstream-authorization",
+        reqwest::header::HeaderValue::from_str(&format!("Bot {}", config::CONFIG.token.get()))
+            .expect("Discord token should be a valid header value"),
+    );
+
+    let proxy_client = reqwest::Client::builder()
+        .use_rustls_tls()
+        .default_headers(proxy_headers)
+        .build()
+        .expect("Failed to build reqwest client for Discord proxy");
+
     let http = Arc::new(
         serenity::all::HttpBuilder::new(&config::CONFIG.token.get())
+            .client(proxy_client)
             .proxy(config::CONFIG.proxy_url.clone())
             .ratelimiter_disabled(true)
             .build(),

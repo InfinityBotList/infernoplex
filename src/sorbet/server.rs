@@ -325,9 +325,12 @@ async fn query(
         }
         InfernoplexQuery::IsInGuild { guild_id } => Ok(InfernoplexResponse::IsInGuild {
             in_guild: state.cache_http.cache.guild(guild_id).is_some(),
+            // guild_id + disable_guild_select locks the OAuth flow to this
+            // specific server rather than leaving the caller to pick the
+            // right one out of every server they manage.
             invite_url: format!(
-                "https://discord.com/oauth2/authorize?client_id={}&scope=bot%20applications.commands",
-                state.client_id
+                "https://discord.com/oauth2/authorize?client_id={}&scope=bot%20applications.commands&guild_id={}&disable_guild_select=true",
+                state.client_id, guild_id
             ),
         }),
     }
