@@ -5,25 +5,47 @@ use std::{fs::File, io::Write};
 
 use crate::Error;
 
+pub const CURRENT_ENV_PROD: &str = "prod";
+pub const CURRENT_ENV_STAGING: &str = "staging";
+pub const CURRENT_ENV_DEV: &str = "dev";
+
 pub static CURRENT_ENV: Lazy<&str> = Lazy::new(|| {
     let current_env = include_bytes!("../current-env");
 
-    std::str::from_utf8(current_env).unwrap()
+    let env = std::str::from_utf8(current_env).unwrap().trim();
+
+    if env != CURRENT_ENV_PROD && env != CURRENT_ENV_STAGING && env != CURRENT_ENV_DEV {
+        panic!("invalid environment in current-env: {}", env);
+    }
+
+    env
 });
 
 /// Global config object
 pub static CONFIG: Lazy<Config> = Lazy::new(|| Config::load().expect("Failed to load config"));
 
+/// Common struct for values that differ between staging and production
+/// environments, plus an optional per-developer override for local dev use.
 #[derive(Serialize, Deserialize, Default)]
 pub struct Differs<T: Default + Clone> {
     staging: T,
     prod: T,
+
+    /// Only consulted when running with current-env set to "dev", and even
+    /// then only if it has been set — an unset dev falls back to staging, so
+    /// config.yaml files that predate this field keep working unchanged.
+    #[serde(default)]
+    dev: Option<T>,
 }
 
 impl<T: Default + Clone> Differs<T> {
     /// Get the value for a given environment
     pub fn get_for_env(&self, env: &str) -> T {
-        if env == "staging" {
+        if env == CURRENT_ENV_DEV {
+            return self.dev.clone().unwrap_or_else(|| self.staging.clone());
+        }
+
+        if env == CURRENT_ENV_STAGING {
             self.staging.clone()
         } else {
             self.prod.clone()
@@ -70,21 +92,25 @@ impl Default for Config {
             server_port: Differs {
                 staging: 61000,
                 prod: 61001,
+                dev: None,
             },
             database_url: String::from(""),
             token: Differs {
                 staging: String::from(""),
                 prod: String::from(""),
+                dev: None,
             },
             prefix: Differs {
                 staging: String::from("sls!"),
                 prod: String::from("sl!"),
+                dev: None,
             },
             client_secret: String::from(""),
             servers: Servers::default(),
             frontend_url: Differs {
                 staging: String::from("https://reedwhisker.infinitybots.gg"),
                 prod: String::from("https://infinitybots.gg"),
+                dev: None,
             },
             proxy_url: String::from("http://127.0.0.1:3219"),
             cdn_main_scope_path: String::from("/silverpelt/cdn/ibl"),

@@ -2,7 +2,7 @@ use crate::{Context, Error};
 use serenity::all::Mentionable;
 
 /// Get the users who have voted the most for your server
-#[poise::command(prefix_command, slash_command, guild_cooldown = 3)]
+#[poise::command(slash_command, guild_cooldown = 3)]
 pub async fn leaderboard(
     ctx: Context<'_>,
     #[description = "How many results to render."] limit: Option<i64>,

@@ -98,7 +98,10 @@ async fn event_listener<'a>(
             #[allow(clippy::collapsible_if)]
             if ctx.serenity_context.shard_id.0 == 0 {
                 if !CONNECT_STATE.read().await.has_started_bgtasks {
-                    if *crate::config::CURRENT_ENV != "staging" {
+                    // Only real production runs background tasks (server sync,
+                    // team cleanup) against real guilds — staging and dev both
+                    // skip them.
+                    if *crate::config::CURRENT_ENV == crate::config::CURRENT_ENV_PROD {
                         tokio::task::spawn(botox::taskman::start_all_tasks(
                             crate::tasks::tasks(),
                             ctx.serenity_context.clone(),
@@ -109,68 +112,12 @@ async fn event_listener<'a>(
                 }
             }
         }
-        FullEvent::GuildMemberUpdate { new, .. } => {
-            let Some(member) = new else {
-                return Err("GuildMemberUpdate: Member not found".into());
-            };
-
-            if member.user.bot() {
-                return Ok(());
-            }
-
-            let pool = &ctx.user_data().pool;
-
-            let permissions = member.permissions(&ctx.serenity_context.cache)?;
-
-            if !permissions.administrator() {
-                // Delete them if service is infernoplex
-                let res = sqlx::query!(
-                    "SELECT team_owner FROM servers WHERE server_id = $1",
-                    member.guild_id.to_string(),
-                )
-                .fetch_optional(pool)
-                .await?;
-
-                let team_owner = match res {
-                    Some(row) => row.team_owner,
-                    None => return Ok(()),
-                };
-
-                // Delete them if added_by is infernoplex using a delete statement
-                sqlx::query!(
-                    "DELETE FROM team_members WHERE team_id = $1 AND user_id = $2 AND service = 'infernoplex'",
-                    team_owner,
-                    member.user.id.to_string(),
-                )
-                .execute(pool)
-                .await?;
-            }
-        }
-        FullEvent::GuildMemberRemoval { guild_id, user, .. } => {
-            // Check the team the server is on, delete them if service is infernoplex
-            let pool = &ctx.user_data().pool;
-
-            let res = sqlx::query!(
-                "SELECT team_owner FROM servers WHERE server_id = $1",
-                guild_id.to_string(),
-            )
-            .fetch_optional(pool)
-            .await?;
-
-            let team_owner = match res {
-                Some(row) => row.team_owner,
-                None => return Ok(()),
-            };
-
-            // Delete them if added_by is infernoplex using a delete statement
-            sqlx::query!(
-                "DELETE FROM team_members WHERE team_id = $1 AND user_id = $2 AND service = 'infernoplex'",
-                team_owner,
-                user.id.to_string(),
-            )
-            .execute(pool)
-            .await?;
-        }
+        // Team-member cleanup (removing someone who left the guild or lost
+        // Administrator) used to happen here, reacting to
+        // GuildMemberUpdate/GuildMemberRemoval. Those events require the
+        // privileged Server Members intent, which this bot deliberately
+        // doesn't request. See tasks::teamcleanup for the REST-polling
+        // replacement, which needs no privileged intent at all.
         _ => {}
     }
 
@@ -194,26 +141,18 @@ async fn main() {
             .build(),
     );
 
-    // Fetch the application to check for privileged intents
     let application_info = http
         .get_current_application_info()
         .await
         .expect("Could not get app info");
-    let application_flags = application_info.flags.unwrap();
 
-    let mut intents = serenity::all::GatewayIntents::default();
-
-    if application_flags.contains(serenity::all::ApplicationFlags::GATEWAY_GUILD_MEMBERS_LIMITED)
-        | application_flags.contains(serenity::all::ApplicationFlags::GATEWAY_GUILD_MEMBERS)
-    {
-        intents |= serenity::all::GatewayIntents::GUILD_MEMBERS;
-    }
-
-    if application_flags.contains(serenity::all::ApplicationFlags::GATEWAY_PRESENCE_LIMITED)
-        | application_flags.contains(serenity::all::ApplicationFlags::GATEWAY_PRESENCE)
-    {
-        intents |= serenity::all::GatewayIntents::GUILD_PRESENCES;
-    }
+    // Deliberately non-privileged only: GUILD_MEMBERS and GUILD_PRESENCES
+    // are never requested. Slash-command interactions and guild-level data
+    // (roles, channels) don't need them; team-member cleanup and online
+    // counts are handled via REST polling instead (see tasks::teamcleanup
+    // and shadowclaw::stats). This means infernoplex never needs to apply
+    // for privileged-intent verification at all, regardless of scale.
+    let intents = serenity::all::GatewayIntents::default();
 
     let client_builder = serenity::all::ClientBuilder::new_with_http(http, intents);
 
@@ -286,7 +225,12 @@ async fn main() {
         cache: client.cache.clone(),
     };
 
-    tokio::task::spawn(sorbet::server::setup_server(pool, cache_http_papi, intents));
+    tokio::task::spawn(sorbet::server::setup_server(
+        pool,
+        cache_http_papi,
+        intents,
+        application_info.id,
+    ));
 
     if let Err(why) = client.start().await {
         error!("Client error: {:?}", why);

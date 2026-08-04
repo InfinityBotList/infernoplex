@@ -5,6 +5,13 @@ CURRENT_ENV := $(shell cat current-env)
 
 all:
 	cargo build --release
+
+dev:
+	set -a; . ./.env; set +a; cargo run
+
+dev-prepare:
+	set -a; . ./.env; set +a; cargo sqlx prepare
+
 restartwebserver:
 	cargo sqlx prepare
 	make all

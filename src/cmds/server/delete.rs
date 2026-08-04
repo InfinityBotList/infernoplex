@@ -12,7 +12,7 @@ async fn _delete_check(ctx: Context<'_>) -> Result<bool, Error> {
 }
 
 /// Delete your server from Infinity List, needs 'servers.delete' permissions
-#[poise::command(prefix_command, slash_command, check = "_delete_check")]
+#[poise::command(slash_command, check = "_delete_check")]
 pub async fn delete(ctx: Context<'_>) -> Result<(), Error> {
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be executed in a server".into());

@@ -24,7 +24,7 @@ enum UpdatePane {
 }
 
 /// Update your server information on Infinity List, needs 'server.edit' permissions
-#[poise::command(prefix_command, slash_command, check = "_update_check")]
+#[poise::command(slash_command, check = "_update_check")]
 pub async fn update(
     ctx: Context<'_>,
     #[description = "The pane to update"] pane: UpdatePane,

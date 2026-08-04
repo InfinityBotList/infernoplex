@@ -26,12 +26,14 @@ pub struct AppState {
     pub cache_http: CacheHttpImpl,
     pub pool: PgPool,
     pub intents: serenity::all::GatewayIntents,
+    pub client_id: serenity::all::ApplicationId,
 }
 
 pub async fn setup_server(
     pool: PgPool,
     cache_http: CacheHttpImpl,
     intents: serenity::all::GatewayIntents,
+    client_id: serenity::all::ApplicationId,
 ) {
     use utoipa::OpenApi;
     #[derive(OpenApi)]
@@ -67,6 +69,7 @@ pub async fn setup_server(
         pool,
         cache_http,
         intents,
+        client_id,
     });
 
     let app = Router::new()
@@ -114,6 +117,13 @@ pub enum InfernoplexQuery {
         #[ts(type = "string")]
         guild_id: serenity::all::GuildId,
     },
+    /// Checks whether the bot is currently a member of the given guild.
+    /// Used by Add Server to nudge owners to invite the bot when features
+    /// that need it (emoji/sticker sync, real invites, etc.) won't work.
+    IsInGuild {
+        #[ts(type = "string")]
+        guild_id: serenity::all::GuildId,
+    },
 }
 
 #[derive(Serialize, Deserialize, ToSchema, TS, Display, Clone, VariantNames)]
@@ -125,6 +135,14 @@ pub enum InfernoplexResponse {
         result: CreateInviteForUserResult,
     },
     ResolveInvite {},
+    /// The result of calling IsInGuild
+    IsInGuild {
+        /// Whether the bot is currently a member of the guild
+        in_guild: bool,
+        /// A ready-to-use OAuth2 invite URL for the bot, so a caller can
+        /// prompt the guild owner to add it when in_guild is false
+        invite_url: String,
+    },
 }
 
 impl IntoResponse for InfernoplexResponse {
@@ -305,5 +323,12 @@ async fn query(
                 )),
             }
         }
+        InfernoplexQuery::IsInGuild { guild_id } => Ok(InfernoplexResponse::IsInGuild {
+            in_guild: state.cache_http.cache.guild(guild_id).is_some(),
+            invite_url: format!(
+                "https://discord.com/oauth2/authorize?client_id={}&scope=bot%20applications.commands",
+                state.client_id
+            ),
+        }),
     }
 }

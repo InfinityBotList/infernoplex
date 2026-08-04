@@ -12,17 +12,13 @@ use poise::{
 use crate::{Context, Error};
 
 /// Sets up a server, needs 'Administrator' permissions on the author
-#[poise::command(prefix_command, slash_command, required_permissions = "ADMINISTRATOR")]
+#[poise::command(slash_command, required_permissions = "ADMINISTRATOR")]
 pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
-    let guild: serenity::all::Guild = {
-        let Some(cached_guild) = ctx.guild() else {
-            return Err("This command must be run in a server!".into());
-        };
-
-        cached_guild.clone() // Clone to avoid Sync issues
+    let Some(guild_id) = ctx.guild_id() else {
+        return Err("This command must be run in a server!".into());
     };
 
-    let server_id = guild.id.to_string();
+    let server_id = guild_id.to_string();
 
     // Check if the server is already setup
     let res = sqlx::query!(
@@ -70,7 +66,7 @@ pub async fn setup(ctx: Context<'_>) -> Result<(), Error> {
             .description("
 The following setup will now be performed:
 
-- A new team will be created for your server. The server owner as well as all administrators will then be able to manage this servers listing. You can add more members later through `Team Settings`.
+- A new team will be created for your server, owned by you. You can add other administrators to it afterward through `Team Settings`.
 - This server will be added and will be owned by the team. Note that you can transfer ownership of this team to anyone on Infinity List if you want to.
 - The server created will be set as a `draft` and will not be visible until it is published.
 
@@ -194,7 +190,7 @@ Notes:
     let invite = crate::shadowclaw::invite::setup_invite_view(&ctx).await?;
 
     // Get guild stats
-    let guild_stats = crate::shadowclaw::stats::GuildStats::from_ctx(&ctx)?;
+    let guild_stats = crate::shadowclaw::stats::GuildStats::from_ctx(&ctx).await?;
 
     // Create a new team with a random vanity
     let mut tx = ctx.data().pool.begin().await?;
@@ -275,43 +271,42 @@ Notes:
     .execute(&mut *tx)
     .await?;
 
-    // Add all administrators
-    for member in guild.members {
-        if member.user.id == guild_stats.owner || member.user.bot() {
-            continue;
-        }
+    // The command runner isn't always the guild owner (only Administrator
+    // is required to run /setup) - make sure they're actually on the team
+    // they just created, or they'd have no access to manage the listing
+    // they just made.
+    //
+    // Other administrators are no longer auto-added here: that required
+    // bulk-listing guild members, which needs the privileged Server
+    // Members intent, deliberately not requested. They can be added
+    // manually afterward via Team Settings on the website, as the
+    // confirmation message already tells the runner.
+    if ctx.author().id != guild_stats.owner {
+        let res = sqlx::query!(
+            "SELECT COUNT(*) FROM users WHERE user_id = $1",
+            ctx.author().id.to_string()
+        )
+        .fetch_one(&mut *tx)
+        .await?;
 
-        let member_permissions = member.permissions(ctx.cache())?;
-
-        if member_permissions.administrator() {
-            // Then add administrator to team
-            // First ensure the user is a ibl user
-            let res = sqlx::query!(
-                "SELECT COUNT(*) FROM users WHERE user_id = $1",
-                member.user.id.to_string()
-            )
-            .fetch_one(&mut *tx)
-            .await?;
-
-            if res.count.unwrap_or(0) == 0 {
-                sqlx::query!(
-                    "INSERT INTO users (user_id, extra_links, developer, certified) VALUES ($1, $2, false, false)",
-                    member.user.id.to_string(),
-                    sqlx::types::JsonValue::Array(vec![]),
-                )
-                .execute(&mut *tx)
-                .await?;
-            }
-
+        if res.count.unwrap_or(0) == 0 {
             sqlx::query!(
-                "INSERT INTO team_members (team_id, user_id, flags, service) VALUES ($1, $2, $3, 'infernoplex')",
-                team_id,
-                member.user.id.to_string(),
-                &["server.*".to_string(),]
+                "INSERT INTO users (user_id, extra_links, developer, certified) VALUES ($1, $2, false, false)",
+                ctx.author().id.to_string(),
+                sqlx::types::JsonValue::Array(vec![]),
             )
             .execute(&mut *tx)
             .await?;
         }
+
+        sqlx::query!(
+            "INSERT INTO team_members (team_id, user_id, flags, service) VALUES ($1, $2, $3, 'infernoplex')",
+            team_id,
+            ctx.author().id.to_string(),
+            &["server.*".to_string()]
+        )
+        .execute(&mut *tx)
+        .await?;
     }
 
     // Create a vanity for the server

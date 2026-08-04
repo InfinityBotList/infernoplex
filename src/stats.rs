@@ -12,7 +12,7 @@ pub const BUILD_CPU: &str = env!("VERGEN_SYSINFO_CPU_BRAND");
 pub const CARGO_PROFILE: &str = env!("VERGEN_CARGO_PROFILE");
 pub const RUSTC_VERSION: &str = env!("VERGEN_RUSTC_SEMVER");
 
-#[poise::command(category = "Stats", prefix_command, slash_command, user_cooldown = 1)]
+#[poise::command(category = "Stats", slash_command, user_cooldown = 1)]
 pub async fn stats(ctx: Context<'_>) -> Result<(), Error> {
     let msg = CreateReply::default().embed(
         CreateEmbed::default()
