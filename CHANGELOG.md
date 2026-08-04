@@ -37,7 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `show_emojis`, periodically snapshots the guild's custom emojis and
   stickers into the database (skipping, not clearing, any server the bot
   currently can't reach — REST calls to a guild the bot has left simply
-  fail and that row is left untouched until it's reachable again).
+  fail and that row is left untouched until it's reachable again). Also now
+  syncs every listed server's icon into `servers.avatar` — not gated behind
+  `show_emojis`, and read straight from the gateway cache rather than a REST
+  call, so it's a no-op (not an error) for any server the bot isn't
+  currently in.
 
 ### Fixed
 

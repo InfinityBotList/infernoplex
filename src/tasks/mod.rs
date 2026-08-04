@@ -8,7 +8,7 @@ pub fn tasks() -> Vec<Task> {
     vec![
         Task {
             name: "serversync",
-            description: "Syncs opted-in servers' emojis/stickers into the database",
+            description: "Syncs every listed server's icon, plus opted-in servers' emojis/stickers, into the database",
             duration: std::time::Duration::from_secs(30 * 60),
             enabled: true,
             run: Box::new(move |ctx| crate::tasks::serversync::server_sync(ctx).boxed()),

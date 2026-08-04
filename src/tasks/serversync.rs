@@ -22,6 +22,11 @@ struct SyncedSticker {
 pub async fn server_sync(ctx: &serenity::all::Context) -> Result<(), crate::Error> {
     let data = ctx.data::<Data>();
 
+    // Every listed server gets its icon kept fresh (unlike emoji/sticker
+    // sync below, this isn't gated behind show_emojis — an icon isn't the
+    // kind of thing an owner needs to opt into showing).
+    sync_avatars(ctx).await?;
+
     let rows = sqlx::query("SELECT server_id FROM servers WHERE show_emojis = true")
         .fetch_all(&data.pool)
         .await?;
@@ -72,6 +77,41 @@ pub async fn server_sync(ctx: &serenity::all::Context) -> Result<(), crate::Erro
         .bind(Json(&synced_stickers))
         .execute(&data.pool)
         .await?;
+    }
+
+    Ok(())
+}
+
+/// Refreshes every listed server's icon from the gateway cache. No REST call
+/// is made — the cache reflects live gateway state, so a server the bot
+/// isn't currently a member of is simply skipped rather than erroring.
+async fn sync_avatars(ctx: &serenity::all::Context) -> Result<(), crate::Error> {
+    let data = ctx.data::<Data>();
+
+    let rows = sqlx::query("SELECT server_id FROM servers")
+        .fetch_all(&data.pool)
+        .await?;
+
+    for row in rows {
+        let server_id: String = sqlx::Row::try_get(&row, "server_id")?;
+
+        let Ok(guild_id) = server_id.parse::<GuildId>() else {
+            continue;
+        };
+
+        // Scoped so the cache guard is dropped before the .await below.
+        let avatar = {
+            let Some(guild) = ctx.cache.guild(guild_id) else {
+                continue;
+            };
+            guild.icon_url().unwrap_or_default()
+        };
+
+        sqlx::query("UPDATE servers SET avatar = $2 WHERE server_id = $1")
+            .bind(&server_id)
+            .bind(&avatar)
+            .execute(&data.pool)
+            .await?;
     }
 
     Ok(())
